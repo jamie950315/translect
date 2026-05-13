@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Translect Scenario Page</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Georgia, "Times New Roman", serif;
+      }
+
+      body {
+        margin: 0;
+        background:
+          linear-gradient(180deg, #f8f1e7 0%, #f4f6fb 100%);
+        color: #241b16;
+      }
+
+      main {
+        width: min(1100px, calc(100vw - 48px));
+        margin: 0 auto;
+        padding: 32px 0 80px;
+      }
+
+      h1,
+      h2 {
+        margin: 0 0 12px;
+        font-weight: 700;
+      }
+
+      p {
+        margin: 0;
+        line-height: 1.6;
+      }
+
+      .hero {
+        margin-bottom: 24px;
+        padding: 28px;
+        border-radius: 28px;
+        background: rgba(255, 255, 255, 0.86);
+        box-shadow: 0 20px 48px rgba(89, 61, 35, 0.12);
+      }
+
+      #drag-text {
+        margin-bottom: 28px;
+        padding: 26px 28px;
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: 0 18px 44px rgba(89, 61, 35, 0.1);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 24px;
+        align-items: start;
+      }
+
+      figure {
+        margin: 0;
+      }
+
+      figcaption {
+        margin-top: 8px;
+        color: #6b5b4f;
+        font-size: 14px;
+      }
+
+      img {
+        display: block;
+        border-radius: 24px;
+        max-width: 100%;
+        box-shadow: 0 16px 40px rgba(67, 43, 22, 0.16);
+      }
+
+      .thumb-row {
+        margin-top: 28px;
+        display: flex;
+        gap: 18px;
+        align-items: flex-start;
+      }
+
+      #thumb {
+        width: 96px;
+        height: 96px;
+        border-radius: 22px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>Translect Scenario Coverage</h1>
+        <p>
+          This page intentionally mixes translatable images, a plain photo without text,
+          a tiny thumbnail that should be ignored, and a free-form text region for drag selection.
+        </p>
+      </section>
+
+      <section id="drag-text">
+        <h2>Drag Selection Region</h2>
+        <p>
+          Never use random bold writing in responses.
+          Keep the tone calm, clear, and easy to read.
+        </p>
+      </section>
+
+      <section class="grid">
+        <figure>
+          <img
+            id="white-ui"
+            alt="white ui card"
+            src="/assets/reddit-white-ui.png"
+            width="640"
+            height="180"
+          />
+          <figcaption>`white-ui`: should translate in manual and auto modes.</figcaption>
+        </figure>
+
+        <figure>
+          <img
+            id="dark-ui"
+            alt="dark ui card"
+            src="/assets/reddit-dark-ui.png"
+            width="653"
+            height="577"
+          />
+          <figcaption>`dark-ui`: should translate and cover the original text on a dark background.</figcaption>
+        </figure>
+
+        <figure>
+          <img
+            id="photo"
+            alt="photo without text"
+            src="/assets/reddit-egg-photo.png"
+            width="260"
+            height="360"
+          />
+          <figcaption>`photo`: should not create any overlay because there is no text.</figcaption>
+        </figure>
+      </section>
+
+      <section class="thumb-row">
+        <figure>
+          <img
+            id="thumb"
+            alt="tiny thumbnail"
+            src="/assets/reddit-white-ui.png"
+            width="96"
+            height="96"
+          />
+          <figcaption>`thumb`: visible but too small, so auto mode should skip it.</figcaption>
+        </figure>
+      </section>
+    </main>
+  </body>
+</html>

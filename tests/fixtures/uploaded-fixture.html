@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Uploaded Fixture</title>
+    <style>
+      body {
+        margin: 0;
+        background: #111820;
+      }
+
+      img {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <img id="fixture-image" alt="uploaded fixture" />
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const asset = params.get("asset") || "";
+      document.getElementById("fixture-image").src = `/assets/${asset}`;
+    </script>
+  </body>
+</html>

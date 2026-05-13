@@ -1,0 +1,165 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Translect Reddit Repeat Harness</title>
+    <style>
+      body {
+        margin: 0;
+        background: #0b1014;
+        color: #eef3f6;
+        font-family: Arial, sans-serif;
+      }
+
+      main {
+        margin: 28px auto;
+        width: 420px;
+      }
+
+      article {
+        position: relative;
+        border: 1px solid #a14535;
+        border-radius: 18px;
+        padding: 18px;
+        background: #111820;
+      }
+
+      img {
+        display: block;
+        width: 360px;
+        height: 180px;
+        object-fit: cover;
+        background: #f8f8f8;
+      }
+
+      .duplicate {
+        position: absolute;
+        inset: 18px auto auto 18px;
+        opacity: 0.01;
+      }
+
+      #status {
+        margin: 16px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div id="status">pending</div>
+      <article post-id="t3_browseruse">
+        <a href="https://www.reddit.com/r/test/comments/browseruse/example/">
+          <img id="target" alt="reddit post image" />
+          <img id="duplicate-target" class="duplicate" alt="reddit duplicate image" />
+        </a>
+      </article>
+    </main>
+    <script>
+      const listeners = [];
+      const settings = {
+        alwaysAutoDetect: false,
+        apiEndpoint: "https://api.openai.test/v1",
+        apiKey: "test",
+        model: "gpt-5.4-mini",
+        targetLanguage: "Traditional Chinese",
+        triggerUsesAutoMode: false
+      };
+
+      function makeImageDataUrl() {
+        const canvas = document.createElement("canvas");
+        canvas.width = 1280;
+        canvas.height = 720;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#f8f8f8";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#111111";
+        ctx.font = "700 64px Arial";
+        ctx.fillText("SSD Stream", 150, 230);
+        ctx.fillText("SSD + TurboQuant", 150, 355);
+        ctx.fillText("SSD + 16-Worker Prefetch", 150, 480);
+        return canvas.toDataURL("image/png");
+      }
+
+      const sourceDataUrl = makeImageDataUrl();
+      document.getElementById("target").src = sourceDataUrl;
+      document.getElementById("duplicate-target").src = sourceDataUrl;
+      let translateCalls = 0;
+
+      globalThis.chrome = {
+        runtime: {
+          onMessage: {
+            addListener(listener) {
+              listeners.push(listener);
+            }
+          },
+          sendMessage(message) {
+            if (message.type === "get-settings") {
+              return Promise.resolve({ settings });
+            }
+            if (message.type === "capture-visible-tab") {
+              return Promise.resolve({ ok: true, dataUrl: sourceDataUrl });
+            }
+            if (message.type === "translate-region") {
+              translateCalls += 1;
+              return Promise.resolve({
+                ok: true,
+                translation: {
+                  blocks: [
+                    {
+                      bounds: { x: 80, y: 170, width: 360, height: 70, rotation: 0 },
+                      groupId: "rows",
+                      sourceLineCount: 1,
+                      sourceText: "SSD Stream",
+                      style: {
+                        align: "left",
+                        backgroundColor: "#f8f8f8",
+                        backgroundOpacity: 0.98,
+                        container: "plain-text",
+                        fontWeight: 600,
+                        strokeColor: "#ffffff",
+                        strokeWidth: 0,
+                        textColor: "#111111",
+                        verticalAlign: "middle"
+                      },
+                      translatedText: "SSD 串流"
+                    }
+                  ]
+                }
+              });
+            }
+            return Promise.resolve({ ok: true });
+          }
+        }
+      };
+
+      function triggerAutoTranslate() {
+        return new Promise((resolve, reject) => {
+          const listener = listeners[0];
+          if (!listener) {
+            reject(new Error("content listener missing"));
+            return;
+          }
+          listener(
+            { type: "page-action", action: "auto-translate-visible" },
+            null,
+            (response) => response?.ok ? resolve() : reject(new Error(response?.error || "failed"))
+          );
+        });
+      }
+
+      function countOverlays() {
+        return document.querySelectorAll("#__translect-root .translect-overlay").length;
+      }
+
+      window.addEventListener("load", async () => {
+        await import("/dist/content.js");
+        const runs = Number(new URLSearchParams(location.search).get("runs") || "1");
+        for (let index = 0; index < runs; index += 1) {
+          await triggerAutoTranslate();
+        }
+        document.getElementById("status").textContent = `overlay-count:${countOverlays()};translate-count:${translateCalls}`;
+        document.body.dataset.overlayCount = String(countOverlays());
+        document.body.dataset.translateCount = String(translateCalls);
+      });
+    </script>
+  </body>
+</html>

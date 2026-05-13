@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Translect</title>
+    <link rel="stylesheet" href="./popup.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Image Translation Overlay</p>
+        <h1>Translect</h1>
+        <p class="summary">Translate text on webpage images and redraw it directly over the original artwork.</p>
+      </section>
+
+      <section class="card">
+        <label class="field">
+          <span>Target language</span>
+          <input id="targetLanguage" type="text" placeholder="Traditional Chinese">
+        </label>
+
+        <label class="field">
+          <span>API endpoint URL</span>
+          <input id="apiEndpoint" type="url" placeholder="https://api.openai.com/v1">
+          <small>Base URL is fine. The extension will call <code>/chat/completions</code>.</small>
+        </label>
+
+        <label class="field">
+          <span>API key</span>
+          <input id="apiKey" type="password" placeholder="sk-...">
+        </label>
+
+        <label class="field">
+          <span>Model ID</span>
+          <input id="model" type="text" placeholder="gpt-5.4-mini">
+        </label>
+      </section>
+
+      <section class="card toggles">
+        <label class="switch">
+          <input id="useIosOcrServer" type="checkbox">
+          <span>
+            <strong>Use iOS OCR Server</strong>
+            <small>Use local iPhone OCR for text boxes, then translate detected text.</small>
+          </span>
+        </label>
+
+        <label class="field">
+          <span>iOS OCR Server URL</span>
+          <input id="iosOcrEndpoint" type="url" placeholder="http://127.0.0.1:8000">
+          <small>Base URL is fine. The extension will call <code>/upload</code>.</small>
+        </label>
+
+        <label class="switch">
+          <input id="alwaysAutoDetect" type="checkbox">
+          <span>
+            <strong>Always auto detect</strong>
+            <small>Automatically translate visible images after pages load.</small>
+          </span>
+        </label>
+
+        <label class="switch">
+          <input id="triggerUsesAutoMode" type="checkbox">
+          <span>
+            <strong>Toolbar button / shortcut uses auto mode</strong>
+            <small>Skip manual selection and translate visible images immediately.</small>
+          </span>
+        </label>
+      </section>
+
+      <section class="card actions">
+        <button id="saveButton" class="primary" type="button">Save settings</button>
+        <button id="manualButton" type="button">Select area or click image</button>
+        <button id="autoButton" type="button">Translate visible images</button>
+        <button id="clearButton" type="button">Clear overlays</button>
+      </section>
+
+      <section class="card footer-card">
+        <p id="status" class="status" aria-live="polite"></p>
+        <p class="shortcut">Shortcut: <span id="shortcutText">Not assigned</span></p>
+        <p class="hint">Shortcut keys can be changed in <code>chrome://extensions/shortcuts</code>.</p>
+      </section>
+    </main>
+
+    <script type="module" src="./popup.js"></script>
+  </body>
+</html>

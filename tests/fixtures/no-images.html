@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>No Images Scenario</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: linear-gradient(180deg, #f7f1e8 0%, #f0f4fb 100%);
+        font-family: Georgia, "Times New Roman", serif;
+        color: #2f241d;
+      }
+
+      article {
+        width: min(760px, calc(100vw - 48px));
+        margin: 48px auto;
+        padding: 32px;
+        border-radius: 28px;
+        background: rgba(255, 255, 255, 0.86);
+        box-shadow: 0 18px 44px rgba(77, 53, 31, 0.12);
+      }
+
+      h1 {
+        margin: 0 0 14px;
+      }
+
+      p {
+        line-height: 1.7;
+        margin: 0 0 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <article>
+      <h1>No Visible Images</h1>
+      <p>This page intentionally contains only text.</p>
+      <p>Auto mode should show the "No visible images were found on this page." toast and create no overlay.</p>
+    </article>
+  </body>
+</html>

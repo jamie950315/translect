@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Partial Visibility Scenario</title>
+    <style>
+      body {
+        margin: 0;
+        background: #f3efe9;
+        font-family: Georgia, "Times New Roman", serif;
+        color: #2d241e;
+      }
+
+      main {
+        width: min(1080px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding-bottom: 80px;
+      }
+
+      .intro {
+        padding: 22px 8px 18px;
+      }
+
+      img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: 28px;
+        box-shadow: 0 18px 40px rgba(73, 49, 24, 0.16);
+      }
+
+      .spacer {
+        height: 1800px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="intro">
+        <h1>Partial Visibility</h1>
+        <p>When this image is clipped by the viewport, auto mode should skip it until it is fully visible.</p>
+      </div>
+
+      <img
+        id="partial-image"
+        alt="partially visible test image"
+        src="/assets/reddit-white-ui.png"
+        width="640"
+        height="180"
+      />
+
+      <div class="spacer"></div>
+    </main>
+  </body>
+</html>

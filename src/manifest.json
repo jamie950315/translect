@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "Translect",
+  "version": "0.1.0",
+  "description": "Translate text inside webpage images with an OpenAI-compatible vision model and redraw it on top of the original image.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Translect",
+    "default_popup": "popup/popup.html"
+  },
+  "commands": {
+    "activate-translation": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "Start image translation or auto-translate visible images"
+    },
+    "toggle-always-auto-detect": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+K",
+        "mac": "Command+Shift+K"
+      },
+      "description": "Toggle always-on auto detect mode"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
