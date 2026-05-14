@@ -16,6 +16,11 @@ import {
   normalizeIosOcrResult
 } from "../shared/ios-ocr.js";
 import {
+  buildMacosVisionTextTranslationPayload,
+  mergeMacosVisionTranslationResults,
+  normalizeMacosVisionOcrResult
+} from "../shared/macos-vision-ocr.js";
+import {
   getSettingsValidationError,
   normalizeSettings
 } from "../shared/settings.js";
@@ -217,7 +222,83 @@ async function requestIosOcrTranslations(settings, requests) {
   }));
 }
 
+async function sendNativeMessage(hostName, message) {
+  if (!chrome.runtime.sendNativeMessage) {
+    throw new Error("Native messaging is not available in this browser.");
+  }
+
+  try {
+    return await chrome.runtime.sendNativeMessage(hostName, message);
+  } catch (error) {
+    const messageText = error instanceof Error ? error.message : String(error);
+    if (/native messaging host not found/i.test(messageText)) {
+      throw new Error(
+        `macOS Vision OCR host is not installed for this extension ID (${chrome.runtime.id}). Run: npm run install:macos-ocr-host -- --extension-id ${chrome.runtime.id}`
+      );
+    }
+    throw error;
+  }
+}
+
+async function requestMacosVisionOcr(settings, request) {
+  const responseJson = await sendNativeMessage(settings.macosVisionHostName, {
+    id: request.id,
+    imageDataUrl: request.imageDataUrl
+  });
+
+  if (!responseJson?.ok) {
+    throw new Error(
+      responseJson?.error ||
+        "The macOS Vision OCR native host could not read the image."
+    );
+  }
+
+  return normalizeMacosVisionOcrResult(request.id, responseJson);
+}
+
+async function requestMacosVisionOcrTranslations(settings, requests) {
+  const ocrImages = await Promise.all(
+    requests.map((request) => requestMacosVisionOcr(settings, request))
+  );
+
+  if (!ocrImages.some((image) => image.blocks.length)) {
+    return requests.map((request) => ({
+      id: request.id,
+      translation: { blocks: [] }
+    }));
+  }
+
+  const payload = buildMacosVisionTextTranslationPayload({
+    model: settings.model,
+    ocrImages,
+    targetLanguage: settings.targetLanguage
+  });
+  const responseJson = await requestChatCompletion(
+    settings.apiEndpoint,
+    settings.apiKey,
+    payload
+  );
+  const assistantText = extractAssistantText(responseJson);
+  const merged = mergeMacosVisionTranslationResults(ocrImages, assistantText);
+  const mergedById = new Map(merged.map((item) => [item.imageId, item.translation]));
+
+  return requests.map((request) => ({
+    id: request.id,
+    translation: mergedById.get(request.id) || { blocks: [] }
+  }));
+}
+
 async function requestTranslation(settings, imageDataUrl) {
+  if (settings.useMacosVisionOcr) {
+    const [result] = await requestMacosVisionOcrTranslations(settings, [
+      {
+        id: "image-0",
+        imageDataUrl
+      }
+    ]);
+    return result.translation;
+  }
+
   if (settings.useIosOcrServer) {
     const [result] = await requestIosOcrTranslations(settings, [
       {
@@ -244,6 +325,10 @@ async function requestTranslation(settings, imageDataUrl) {
 }
 
 async function requestTranslations(settings, requests) {
+  if (settings.useMacosVisionOcr) {
+    return requestMacosVisionOcrTranslations(settings, requests);
+  }
+
   if (settings.useIosOcrServer) {
     return requestIosOcrTranslations(settings, requests);
   }

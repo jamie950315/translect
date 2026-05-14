@@ -33,6 +33,14 @@ describe("render utils", () => {
     expect(Math.max(...lines.map((line) => line.length))).toBeLessThan(text.length / 2);
   });
 
+  test("keeps latin and number runs intact inside CJK text", () => {
+    expect(tokenizeText("二手iPhone17Pro")).toEqual([
+      "二",
+      "手",
+      "iPhone17Pro"
+    ]);
+  });
+
   test("softens CJK font weight and stroke for readability", () => {
     expect(resolveReadableFontWeight(800, "我們不在乎", "plain-text")).toBe(560);
     expect(resolveReadableFontWeight(800, "WE DON'T CARE", "plain-text")).toBe(800);
@@ -176,5 +184,108 @@ describe("render utils", () => {
     );
 
     expect(layouts[0].fontSize).toBeLessThanOrEqual(26);
+  });
+
+  test("allows macOS Vision line boxes to use readable single-line text size", () => {
+    const layouts = planTextLayouts(
+      [
+        {
+          bounds: { x: 50, y: 100, width: 280, height: 32 },
+          provider: "macos-vision",
+          sourceLineCount: 1,
+          style: {
+            align: "center",
+            container: "image-text",
+            fontWeight: 540,
+            rotation: 0
+          },
+          translatedText: "我買了一支二手iPhone17Pro"
+        }
+      ],
+      {
+        maxFontSize(block) {
+          return block.provider === "macos-vision"
+            ? Math.max(14, Math.floor(block.bounds.height * 0.72))
+            : undefined;
+        },
+        measureWidth,
+        minFontSize(block) {
+          return block.provider === "macos-vision" ? 14 : 10;
+        }
+      }
+    );
+
+    expect(layouts[0].fontSize).toBeGreaterThanOrEqual(16);
+  });
+
+  test("lets macOS Vision line boxes use tighter horizontal padding", () => {
+    const text = "一二三四五六七八九十一二三四五六七八九十二三";
+    const layouts = planTextLayouts(
+      [
+        {
+          bounds: { x: 50, y: 100, width: 200, height: 40 },
+          provider: "macos-vision",
+          sourceLineCount: 1,
+          style: {
+            align: "left",
+            container: "image-text",
+            fontWeight: 540,
+            rotation: 0
+          },
+          translatedText: text
+        },
+        {
+          bounds: { x: 50, y: 300, width: 200, height: 40 },
+          sourceLineCount: 1,
+          style: {
+            align: "left",
+            container: "image-text",
+            fontWeight: 540,
+            rotation: 0
+          },
+          translatedText: text
+        }
+      ],
+      {
+        maxFontSize: 16,
+        measureWidth,
+        minFontSize: 16
+      }
+    );
+
+    expect(layouts[0].lines).toHaveLength(1);
+    expect(layouts[1].lines.length).toBeGreaterThan(layouts[0].lines.length);
+  });
+
+  test("keeps macOS Vision text readable even in shorter line boxes", () => {
+    const layouts = planTextLayouts(
+      [
+        {
+          bounds: { x: 50, y: 100, width: 180, height: 24 },
+          provider: "macos-vision",
+          sourceLineCount: 1,
+          style: {
+            align: "left",
+            container: "image-text",
+            fontWeight: 540,
+            rotation: 0
+          },
+          translatedText: "電話號碼一直同步"
+        }
+      ],
+      {
+        maxFontSize(block) {
+          return block.provider === "macos-vision"
+            ? Math.max(18, Math.floor(block.bounds.height * 0.86))
+            : undefined;
+        },
+        measureWidth,
+        minFontSize(block) {
+          return block.provider === "macos-vision" ? 17 : 10;
+        }
+      }
+    );
+
+    expect(layouts[0].fontSize).toBeGreaterThanOrEqual(17);
   });
 });

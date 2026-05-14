@@ -28,7 +28,10 @@
 
         <label class="field">
           <span>API key</span>
-          <input id="apiKey" type="password" placeholder="sk-...">
+          <span class="inline-input">
+            <input id="apiKey" type="password" placeholder="sk-...">
+            <button id="pasteApiKeyButton" class="compact" type="button">Paste</button>
+          </span>
         </label>
 
         <label class="field">
@@ -39,6 +42,20 @@
 
       <section class="card toggles">
         <label class="switch">
+          <input id="useMacosVisionOcr" type="checkbox">
+          <span>
+            <strong>Use macOS Vision OCR</strong>
+            <small>Use a local native host for Apple Vision OCR, then translate detected text.</small>
+          </span>
+        </label>
+
+        <label id="macosVisionSettings" class="field provider-settings">
+          <span>macOS native host name</span>
+          <input id="macosVisionHostName" type="text" placeholder="com.translect.ocr">
+          <small>Extension ID: <code id="extensionIdText"></code></small>
+        </label>
+
+        <label class="switch">
           <input id="useIosOcrServer" type="checkbox">
           <span>
             <strong>Use iOS OCR Server</strong>
@@ -46,7 +63,7 @@
           </span>
         </label>
 
-        <label class="field">
+        <label id="iosOcrSettings" class="field provider-settings">
           <span>iOS OCR Server URL</span>
           <input id="iosOcrEndpoint" type="url" placeholder="http://127.0.0.1:8000">
           <small>Base URL is fine. The extension will call <code>/upload</code>.</small>

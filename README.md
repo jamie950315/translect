@@ -12,8 +12,18 @@ Translect is a Chromium extension that translates text inside webpage images wit
 - One-shot auto mode for toolbar button and shortcut triggers
 - Configurable target language, API key, API endpoint URL, and model ID
 - Optional iOS OCR Server mode for OCR and text-box positioning
-- Batched text-only translation when iOS OCR Server mode is enabled
+- Optional macOS Vision OCR mode through a local native messaging host
+- Batched text-only translation when an OCR provider mode is enabled
 - Default model: `gpt-5.4-mini`
+
+## Requirements
+
+- A Chromium-based browser that supports Manifest V3 extensions.
+- An OpenAI-compatible `/chat/completions` endpoint and API key.
+- Node.js for development, builds, and Playwright scenario tests.
+- Swift toolchain on macOS when using the macOS Vision OCR native host.
+
+The extension stores settings in Chromium extension storage. API keys are not committed by this repository and should not be checked into source control.
 
 ## How It Works
 
@@ -43,6 +53,18 @@ When iOS OCR Server mode is enabled, Translect separates OCR from translation:
 
 This mode keeps text detection and positioning on the OCR server while preserving the existing translation and overlay pipeline.
 
+The configured iOS OCR endpoint can be either the base server URL or the upload URL. Translect normalizes it to `/upload`.
+
+### macOS Vision OCR Mode
+
+When macOS Vision OCR mode is enabled, Translect uses Chrome Native Messaging to call a local Swift helper. The helper runs Apple's Vision framework on the Mac, returns text and bounding boxes, and Translect sends only the detected text to the translation endpoint.
+
+This mode does not require another iOS device and keeps OCR on the local Mac.
+
+macOS Vision OCR boxes are treated as the source of truth for text placement. The renderer keeps translated text inside those OCR frames, uses tight OCR-region covers, and does not enlarge blur masks to fit translated text. Longer translations are distributed across the available OCR line boxes and clipped to the original OCR frame when necessary.
+
+OCR provider modes are mutually exclusive. Enabling macOS Vision OCR disables iOS OCR Server mode.
+
 ## Settings
 
 The popup stores settings in Chromium extension storage:
@@ -54,6 +76,10 @@ The popup stores settings in Chromium extension storage:
 - Auto-detect behavior
 - iOS OCR Server toggle
 - iOS OCR Server endpoint
+- macOS Vision OCR toggle
+- macOS native host name
+
+The macOS native host name defaults to `com.translect.ocr`.
 
 Endpoint normalization is handled automatically:
 
@@ -67,11 +93,38 @@ npm install
 npm test
 npm run build
 npm run test:scenarios
+swift build --package-path native/macos-vision-ocr
 ```
 
 The unpacked extension output is written to `dist/`.
 
 `npm run test:scenarios` builds and loads the extension in Playwright with a local mock API, then verifies manual selection, auto-detect, always-on mode, scrolling, inserted images, no-image pages, and fixture-based image overlays.
+
+## macOS Vision Native Host
+
+Build the Swift helper directly:
+
+```bash
+swift build --package-path native/macos-vision-ocr
+```
+
+Install the native messaging host manifest after loading the unpacked extension and copying its extension ID from `chrome://extensions`:
+
+```bash
+npm run install:macos-ocr-host -- --extension-id <extension-id>
+```
+
+Use `--browser chromium` or `--browser chrome-for-testing` when installing for those browsers instead of regular Google Chrome.
+
+The host name used by the extension is `com.translect.ocr`.
+
+The installer builds the native host in release mode and writes a Native Messaging manifest under the selected browser profile support directory:
+
+- Chrome: `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.translect.ocr.json`
+- Chromium: `~/Library/Application Support/Chromium/NativeMessagingHosts/com.translect.ocr.json`
+- Chrome for Testing: `~/Library/Application Support/Google/ChromeForTesting/NativeMessagingHosts/com.translect.ocr.json`
+
+If Chrome reports that the native messaging host is missing, reinstall with the extension ID shown in the currently loaded unpacked extension. Extension IDs change when the extension is loaded from a different path.
 
 ## Load In Chromium
 
@@ -101,4 +154,7 @@ The always-on auto-detect toggle also has a default shortcut:
 - Manual selection mode can translate any visible screen region, including text embedded in complex layouts.
 - The extension currently targets standard webpage images and visible page regions, not browser-internal pages such as `chrome://`.
 - The extension requires an OpenAI-compatible endpoint and API key for real translations.
+- macOS Vision OCR requires the native host to be installed for the active extension ID.
+- macOS Vision OCR uses Apple Vision only for OCR and text-box coordinates. Translation still goes through the configured OpenAI-compatible endpoint.
+- iOS OCR Server mode uses the iOS server only for OCR and text-box coordinates. Translation still goes through the configured OpenAI-compatible endpoint.
 - Generated files such as `dist/`, `.tmp/`, and Playwright output are not committed.

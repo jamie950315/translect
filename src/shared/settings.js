@@ -37,19 +37,24 @@ export function normalizeIosOcrEndpoint(value) {
 }
 
 export function normalizeSettings(rawSettings = {}) {
+  const useMacosVisionOcr = Boolean(rawSettings.useMacosVisionOcr);
   return {
     apiEndpoint: normalizeApiEndpoint(rawSettings.apiEndpoint || DEFAULT_SETTINGS.apiEndpoint),
     apiKey: cleanString(rawSettings.apiKey),
     iosOcrEndpoint: normalizeIosOcrEndpoint(
       rawSettings.iosOcrEndpoint || DEFAULT_SETTINGS.iosOcrEndpoint
     ),
+    macosVisionHostName:
+      cleanString(rawSettings.macosVisionHostName, DEFAULT_SETTINGS.macosVisionHostName) ||
+      DEFAULT_SETTINGS.macosVisionHostName,
     model: cleanString(rawSettings.model, DEFAULT_SETTINGS.model) || DEFAULT_SETTINGS.model,
     targetLanguage:
       cleanString(rawSettings.targetLanguage, DEFAULT_SETTINGS.targetLanguage) ||
       DEFAULT_SETTINGS.targetLanguage,
     alwaysAutoDetect: Boolean(rawSettings.alwaysAutoDetect),
     triggerUsesAutoMode: Boolean(rawSettings.triggerUsesAutoMode),
-    useIosOcrServer: Boolean(rawSettings.useIosOcrServer)
+    useIosOcrServer: !useMacosVisionOcr && Boolean(rawSettings.useIosOcrServer),
+    useMacosVisionOcr
   };
 }
 
@@ -84,6 +89,9 @@ export function getSettingsValidationError(settings) {
   }
   if (settings.useIosOcrServer && !settings.iosOcrEndpoint) {
     return "iOS OCR Server endpoint is required.";
+  }
+  if (settings.useMacosVisionOcr && !settings.macosVisionHostName) {
+    return "macOS Vision OCR native host name is required.";
   }
   return "";
 }

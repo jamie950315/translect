@@ -11,15 +11,21 @@ const elements = {
   apiKey: document.getElementById("apiKey"),
   autoButton: document.getElementById("autoButton"),
   clearButton: document.getElementById("clearButton"),
+  extensionIdText: document.getElementById("extensionIdText"),
   iosOcrEndpoint: document.getElementById("iosOcrEndpoint"),
+  iosOcrSettings: document.getElementById("iosOcrSettings"),
+  macosVisionHostName: document.getElementById("macosVisionHostName"),
+  macosVisionSettings: document.getElementById("macosVisionSettings"),
   manualButton: document.getElementById("manualButton"),
   model: document.getElementById("model"),
+  pasteApiKeyButton: document.getElementById("pasteApiKeyButton"),
   saveButton: document.getElementById("saveButton"),
   shortcutText: document.getElementById("shortcutText"),
   status: document.getElementById("status"),
   targetLanguage: document.getElementById("targetLanguage"),
   triggerUsesAutoMode: document.getElementById("triggerUsesAutoMode"),
-  useIosOcrServer: document.getElementById("useIosOcrServer")
+  useIosOcrServer: document.getElementById("useIosOcrServer"),
+  useMacosVisionOcr: document.getElementById("useMacosVisionOcr")
 };
 
 function showStatus(message, isError = false) {
@@ -33,10 +39,12 @@ function readFormSettings() {
     apiEndpoint: elements.apiEndpoint.value,
     apiKey: elements.apiKey.value,
     iosOcrEndpoint: elements.iosOcrEndpoint.value,
+    macosVisionHostName: elements.macosVisionHostName.value,
     model: elements.model.value,
     targetLanguage: elements.targetLanguage.value,
     triggerUsesAutoMode: elements.triggerUsesAutoMode.checked,
-    useIosOcrServer: elements.useIosOcrServer.checked
+    useIosOcrServer: elements.useIosOcrServer.checked,
+    useMacosVisionOcr: elements.useMacosVisionOcr.checked
   });
 }
 
@@ -46,10 +54,28 @@ function fillForm(settings) {
   elements.apiEndpoint.value = values.apiEndpoint;
   elements.apiKey.value = values.apiKey;
   elements.iosOcrEndpoint.value = values.iosOcrEndpoint;
+  elements.macosVisionHostName.value = values.macosVisionHostName;
   elements.model.value = values.model;
   elements.targetLanguage.value = values.targetLanguage;
   elements.triggerUsesAutoMode.checked = values.triggerUsesAutoMode;
   elements.useIosOcrServer.checked = values.useIosOcrServer;
+  elements.useMacosVisionOcr.checked = values.useMacosVisionOcr;
+  updateProviderSettingsVisibility();
+}
+
+function updateProviderSettingsVisibility() {
+  elements.macosVisionSettings.hidden = !elements.useMacosVisionOcr.checked;
+  elements.iosOcrSettings.hidden = !elements.useIosOcrServer.checked;
+}
+
+function selectOcrProvider(provider) {
+  if (provider === "macos" && elements.useMacosVisionOcr.checked) {
+    elements.useIosOcrServer.checked = false;
+  }
+  if (provider === "ios" && elements.useIosOcrServer.checked) {
+    elements.useMacosVisionOcr.checked = false;
+  }
+  updateProviderSettingsVisibility();
 }
 
 async function saveSettings(message = "Settings saved.") {
@@ -68,6 +94,29 @@ async function saveSettings(message = "Settings saved.") {
     type: MESSAGE_TYPES.DISPATCH_ACTIVE_TAB,
     action: PAGE_ACTIONS.SETTINGS_UPDATED
   });
+}
+
+async function pasteApiKeyFromClipboard() {
+  elements.apiKey.focus();
+
+  if (!navigator.clipboard?.readText) {
+    throw new Error("Clipboard paste is not available in this popup.");
+  }
+
+  let text = "";
+  try {
+    text = await navigator.clipboard.readText();
+  } catch {
+    throw new Error("Clipboard permission is blocked. Reload the extension after rebuilding.");
+  }
+
+  if (!text.trim()) {
+    throw new Error("Clipboard is empty.");
+  }
+
+  elements.apiKey.value = text.trim();
+  elements.apiKey.dispatchEvent(new Event("input", { bubbles: true }));
+  showStatus("API key pasted.");
 }
 
 async function runPageAction(action) {
@@ -90,6 +139,7 @@ async function initShortcutText() {
 async function initialize() {
   const response = await sendMessage({ type: MESSAGE_TYPES.GET_SETTINGS });
   fillForm(normalizeSettings(response?.settings || DEFAULT_SETTINGS));
+  elements.extensionIdText.textContent = chrome.runtime.id;
   await initShortcutText();
 }
 
@@ -99,6 +149,23 @@ elements.saveButton.addEventListener("click", async () => {
   } catch (error) {
     showStatus(error.message, true);
   }
+});
+
+elements.pasteApiKeyButton.addEventListener("click", async () => {
+  try {
+    await pasteApiKeyFromClipboard();
+  } catch (error) {
+    showStatus(error.message, true);
+    elements.apiKey.focus();
+  }
+});
+
+elements.useMacosVisionOcr.addEventListener("change", () => {
+  selectOcrProvider("macos");
+});
+
+elements.useIosOcrServer.addEventListener("change", () => {
+  selectOcrProvider("ios");
 });
 
 elements.manualButton.addEventListener("click", async () => {

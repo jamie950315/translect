@@ -11,7 +11,9 @@ function normalizeUrl(value) {
 }
 
 function normalizeSettingsKey(settings = {}) {
-  const provider = settings.useIosOcrServer
+  const provider = settings.useMacosVisionOcr
+    ? `macos-vision:${String(settings.macosVisionHostName || "").trim().toLowerCase()}`
+    : settings.useIosOcrServer
     ? `ios-ocr:${String(settings.iosOcrEndpoint || "").trim().toLowerCase()}`
     : "vision";
   return [

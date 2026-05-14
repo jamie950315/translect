@@ -37,6 +37,7 @@ import {
   resolveReadableFontWeight,
   resolveReadableStrokeWidth
 } from "../shared/render-utils.js";
+import { distributeTextAcrossBoxes } from "../shared/flow-text.js";
 import { normalizeSettings } from "../shared/settings.js";
 
 const ROOT_ID = "__translect-root";
@@ -275,6 +276,10 @@ function measureImageFingerprint(imageElement, settings) {
 }
 
 function translationProviderKey(settings) {
+  if (settings.useMacosVisionOcr) {
+    return `macos-vision:${settings.macosVisionHostName || ""}`;
+  }
+
   return settings.useIosOcrServer
     ? `ios-ocr:${settings.iosOcrEndpoint || ""}`
     : "vision";
@@ -925,6 +930,95 @@ function drawBlurCover(outputCtx, sourceCanvas, rect, backgroundColor, backgroun
   outputCtx.fill();
 }
 
+function drawTightOcrBlurCover(outputCtx, sourceCanvas, rect, backgroundColor, backgroundOpacity) {
+  const padX = Math.max(2, Math.round(rect.width * 0.01));
+  const padY = Math.max(1, Math.round(rect.height * 0.035));
+  const blurRadius = Math.max(10, Math.round(Math.min(rect.width, rect.height) * 0.34));
+  const coverRect = expandRectByPadding(
+    rect,
+    {
+      bottom: padY,
+      left: padX,
+      right: padX,
+      top: padY
+    },
+    sourceCanvas.width,
+    sourceCanvas.height
+  );
+  const blurSampleRect = expandRect(
+    coverRect,
+    Math.max(4, blurRadius * 2),
+    sourceCanvas.width,
+    sourceCanvas.height
+  );
+  const localCenterX = rect.x + rect.width / 2;
+  const localCenterY = rect.y + rect.height / 2;
+  const localCoverRect = localizeRect(coverRect, localCenterX, localCenterY);
+  const localSampleRect = localizeRect(blurSampleRect, localCenterX, localCenterY);
+  const patchCanvas = document.createElement("canvas");
+  patchCanvas.width = Math.max(1, Math.ceil(blurSampleRect.width));
+  patchCanvas.height = Math.max(1, Math.ceil(blurSampleRect.height));
+  const patchCtx = getCanvasContext2d(patchCanvas);
+
+  patchCtx.drawImage(
+    sourceCanvas,
+    blurSampleRect.x,
+    blurSampleRect.y,
+    blurSampleRect.width,
+    blurSampleRect.height,
+    0,
+    0,
+    blurSampleRect.width,
+    blurSampleRect.height
+  );
+  patchCtx.filter = `blur(${blurRadius}px)`;
+  patchCtx.drawImage(
+    sourceCanvas,
+    blurSampleRect.x,
+    blurSampleRect.y,
+    blurSampleRect.width,
+    blurSampleRect.height,
+    0,
+    0,
+    blurSampleRect.width,
+    blurSampleRect.height
+  );
+
+  outputCtx.save();
+  roundRectPath(
+    outputCtx,
+    localCoverRect.x,
+    localCoverRect.y,
+    localCoverRect.width,
+    localCoverRect.height,
+    2
+  );
+  outputCtx.clip();
+  outputCtx.drawImage(
+    patchCanvas,
+    localSampleRect.x,
+    localSampleRect.y,
+    localSampleRect.width,
+    localSampleRect.height
+  );
+  outputCtx.restore();
+
+  const numericOpacity = Number(backgroundOpacity);
+  const tintOpacity = Number.isFinite(numericOpacity)
+    ? Math.min(0.22, Math.max(0.08, numericOpacity * 0.22))
+    : 0.14;
+  outputCtx.fillStyle = rgbaString(backgroundColor, tintOpacity);
+  roundRectPath(
+    outputCtx,
+    localCoverRect.x,
+    localCoverRect.y,
+    localCoverRect.width,
+    localCoverRect.height,
+    2
+  );
+  outputCtx.fill();
+}
+
 function drawWrappedText(ctx, rect, style, layout) {
   const fontFamily =
     style.container === "image-text"
@@ -986,6 +1080,88 @@ function drawWrappedText(ctx, rect, style, layout) {
   }
 }
 
+function macosVisionLineFontSize(rect) {
+  return Math.max(18, Math.floor(rect.height * 0.86));
+}
+
+function macosVisionFlowPackingFontSize(rect) {
+  return Math.max(16, Math.floor(rect.height * 0.7));
+}
+
+function macosVisionFlowTextBox(rect) {
+  const paddingX = Math.max(2, rect.width * 0.02);
+  return {
+    width: Math.max(18, rect.width - paddingX * 2)
+  };
+}
+
+function applyMacosVisionTextFlow(renderBlocks, outputCtx) {
+  const groups = new Map();
+
+  for (const [index, item] of renderBlocks.entries()) {
+    const groupId = item.block.flowGroupId;
+    if (item.block.provider !== "macos-vision" || !groupId || !item.block.flowText) {
+      continue;
+    }
+
+    if (!groups.has(groupId)) {
+      groups.set(groupId, []);
+    }
+    groups.get(groupId).push({ index, item });
+  }
+
+  if (!groups.size) {
+    return renderBlocks;
+  }
+
+  const nextBlocks = renderBlocks.slice();
+
+  for (const groupItems of groups.values()) {
+    const ordered = groupItems
+      .slice()
+      .sort((first, second) => {
+        const firstIndex = Number(first.item.block.flowBoxIndex);
+        const secondIndex = Number(second.item.block.flowBoxIndex);
+        if (Number.isFinite(firstIndex) && Number.isFinite(secondIndex)) {
+          return firstIndex - secondIndex;
+        }
+        return first.item.rect.y - second.item.rect.y || first.item.rect.x - second.item.rect.x;
+      });
+    const flowText = ordered[0].item.block.flowText;
+    const boxes = ordered.map(({ item }) => ({
+      ...macosVisionFlowTextBox(item.rect),
+      item
+    }));
+    const assignments = distributeTextAcrossBoxes(flowText, boxes, {
+      measureWidth(value, box) {
+        const item = box.item;
+        const fontSize = macosVisionFlowPackingFontSize(item.rect);
+        const fontWeight = resolveReadableFontWeight(
+          item.resolvedStyle.fontWeight,
+          value,
+          item.resolvedStyle.container
+        );
+        outputCtx.font = `${fontWeight} ${fontSize}px Arial, "Helvetica Neue", Helvetica, sans-serif`;
+        return outputCtx.measureText(value).width;
+      }
+    });
+
+    for (const [assignmentIndex, assignment] of assignments.entries()) {
+      const target = ordered[assignmentIndex];
+      nextBlocks[target.index] = {
+        ...target.item,
+        coverRect: target.item.coverRect || target.item.rect,
+        block: {
+          ...target.item.block,
+          translatedText: assignment
+        }
+      };
+    }
+  }
+
+  return nextBlocks;
+}
+
 async function renderTranslatedCanvas(imageDataUrl, translation) {
   const image = await loadImage(imageDataUrl);
   const sourceCanvas = document.createElement("canvas");
@@ -1000,22 +1176,22 @@ async function renderTranslatedCanvas(imageDataUrl, translation) {
   const outputCtx = getCanvasContext2d(outputCanvas);
   outputCtx.drawImage(image, 0, 0);
 
-  const renderBlocks = translation.blocks
+  let renderBlocks = translation.blocks
     .map((block) => ({
       block,
       rect: normalizeBoundsToPixels(block.bounds, outputCanvas.width, outputCanvas.height)
     }))
     .filter(({ rect }) => rectIsLargeEnough(rect, 12))
     .map(({ block, rect }) => {
-      const usesIosOcr = block.provider === "ios-ocr";
+      const usesProviderOcr = block.provider === "ios-ocr" || block.provider === "macos-vision";
       const textArea = inspectTextArea(sourceCtx, rect, block.style.textColor);
-      const containerKind = usesIosOcr
+      const containerKind = usesProviderOcr
         ? "image-text"
         : resolveRenderedContainerKind(
             block.style.container,
             textArea.containerKind
           );
-      const placementRect = usesIosOcr
+      const placementRect = usesProviderOcr
         ? rect
         : resolvePlacementRect(rect, textArea, containerKind);
       const backgroundColor =
@@ -1028,6 +1204,7 @@ async function renderTranslatedCanvas(imageDataUrl, translation) {
       return {
         backgroundColor,
         block,
+        coverRect: placementRect,
         rect: placementRect,
         resolvedStyle: {
           ...block.style,
@@ -1039,11 +1216,13 @@ async function renderTranslatedCanvas(imageDataUrl, translation) {
         textArea
       };
     });
+  renderBlocks = applyMacosVisionTextFlow(renderBlocks, outputCtx);
 
   const textLayouts = planTextLayouts(
     renderBlocks.map(({ block, rect, resolvedStyle }) => ({
       bounds: rect,
       groupId: block.groupId,
+      provider: block.provider,
       sourceLineCount: block.sourceLineCount,
       sourceText: block.sourceText,
       style: resolvedStyle,
@@ -1063,24 +1242,50 @@ async function renderTranslatedCanvas(imageDataUrl, translation) {
         outputCtx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
         return outputCtx.measureText(value).width;
       },
-      minFontSize: 10
+      maxFontSize(block) {
+        return block.provider === "macos-vision"
+          ? macosVisionLineFontSize(block.bounds)
+          : undefined;
+      },
+      minFontSize(block) {
+        return block.provider === "macos-vision" ? 16 : 10;
+      }
     }
   );
 
-  for (const [index, { block, rect, resolvedStyle }] of renderBlocks.entries()) {
+  for (const [index, { block, coverRect, rect, resolvedStyle }] of renderBlocks.entries()) {
     const layout = textLayouts[index];
+    const providerCoverRect = coverRect || rect;
 
     outputCtx.save();
-    outputCtx.translate(rect.x + rect.width / 2, rect.y + rect.height / 2);
-    outputCtx.rotate((rect.rotation * Math.PI) / 180);
 
-    if (block.provider === "ios-ocr") {
+    if (block.provider === "macos-vision" && !block.translatedText) {
+      outputCtx.translate(
+        providerCoverRect.x + providerCoverRect.width / 2,
+        providerCoverRect.y + providerCoverRect.height / 2
+      );
+      outputCtx.rotate((providerCoverRect.rotation * Math.PI) / 180);
+      drawTightOcrBlurCover(
+        outputCtx,
+        sourceCanvas,
+        providerCoverRect,
+        resolvedStyle.backgroundColor,
+        block.style.backgroundOpacity ?? 0.7
+      );
+    } else if (block.provider === "ios-ocr" || block.provider === "macos-vision") {
+      outputCtx.translate(
+        providerCoverRect.x + providerCoverRect.width / 2,
+        providerCoverRect.y + providerCoverRect.height / 2
+      );
+      outputCtx.rotate((providerCoverRect.rotation * Math.PI) / 180);
       drawCompactOcrCover(
         outputCtx,
-        rect,
+        providerCoverRect,
         resolvedStyle.backgroundColor
       );
     } else if (resolvedStyle.container === "image-text") {
+      outputCtx.translate(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      outputCtx.rotate((rect.rotation * Math.PI) / 180);
       drawBlurCover(
         outputCtx,
         sourceCanvas,
@@ -1090,6 +1295,8 @@ async function renderTranslatedCanvas(imageDataUrl, translation) {
         resolvedStyle.container
       );
     } else {
+      outputCtx.translate(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      outputCtx.rotate((rect.rotation * Math.PI) / 180);
       drawSolidCover(
         outputCtx,
         rect,
@@ -1098,7 +1305,16 @@ async function renderTranslatedCanvas(imageDataUrl, translation) {
         resolvedStyle.container
       );
     }
+    outputCtx.restore();
 
+    outputCtx.save();
+    outputCtx.translate(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    outputCtx.rotate((rect.rotation * Math.PI) / 180);
+    if (block.provider === "ios-ocr" || block.provider === "macos-vision") {
+      outputCtx.beginPath();
+      outputCtx.rect(-rect.width / 2, -rect.height / 2, rect.width, rect.height);
+      outputCtx.clip();
+    }
     drawWrappedText(outputCtx, rect, {
       align: resolvedStyle.align,
       container: resolvedStyle.container,

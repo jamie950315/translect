@@ -13,7 +13,8 @@ export function tokenizeText(text) {
     }
 
     if (cjkPattern.test(part)) {
-      tokens.push(...Array.from(part));
+      const mixedTokens = part.match(/[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]|[^\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]+/gu);
+      tokens.push(...(mixedTokens || []));
     } else {
       tokens.push(part);
     }
@@ -183,6 +184,13 @@ function normalizeColorKey(color) {
 }
 
 function getTextPadding(rect, block) {
+  if (block?.provider === "macos-vision") {
+    return {
+      x: Math.max(2, rect.width * 0.02),
+      y: Math.max(4, rect.height * 0.04)
+    };
+  }
+
   switch (block?.style?.container) {
     case "caption-strip":
       return {
@@ -424,6 +432,7 @@ function createTextLayout(block, options, fixedFontSize) {
     measureWidth,
     minFontSize = 10
   } = options;
+  const resolvedMinFontSize = typeof minFontSize === "function" ? minFontSize(block) : minFontSize;
   const textBox = getTextBox(block.bounds, block);
   const measure = (value, fontSize) => measureWidth(value, fontSize, block);
 
@@ -441,7 +450,7 @@ function createTextLayout(block, options, fixedFontSize) {
     lineHeightRatio,
     maxFontSize: resolveBlockMaxFontSize(block, maxFontSize),
     measureWidth: measure,
-    minFontSize,
+    minFontSize: resolvedMinFontSize,
     targetLineCount: resolveSourceLineCount(block)
   });
 

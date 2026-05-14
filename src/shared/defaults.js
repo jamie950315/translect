@@ -4,11 +4,13 @@ export const DEFAULT_SETTINGS = {
   apiEndpoint: "https://api.openai.com/v1",
   apiKey: "",
   iosOcrEndpoint: "http://127.0.0.1:8000/upload",
+  macosVisionHostName: "com.translect.ocr",
   model: "gpt-5.4-mini",
   targetLanguage: "Traditional Chinese",
   alwaysAutoDetect: false,
   triggerUsesAutoMode: false,
-  useIosOcrServer: false
+  useIosOcrServer: false,
+  useMacosVisionOcr: false
 };
 
 export const MESSAGE_TYPES = {

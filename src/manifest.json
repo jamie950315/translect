@@ -2,9 +2,12 @@
   "manifest_version": 3,
   "name": "Translect",
   "version": "0.1.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApJLLQUiOBQvC6XbmWuhXugJI/0QHI3Ue7ZRpIYDpOqp5ouus6s1IRJYROzgAoS+EJ9JmB8KEIPdiWEn+jsCQr+6FrcNeaiPFYx2boUmqpeilzT8XCkDxkPw/kBp4tme+zImyXoja3o9ZqddQag5juT+w7QPengivu3bYmalzaX/YR41zXT80byJmispdvGGDNVLk5YjwtjOl7yUhhf3Mr7NZfChVDzALS4S9fMXUE1vOKFhfUt0it5MmuJ+ftlgAa5iG3bqFXBgeUlVhaEvjVTw73800kJ1hYQeNKLTLg502iGnxemNpwCWlSMrjVBNpzn0e8Bh6Pg5HV3RAOYv0KwIDAQAB",
   "description": "Translate text inside webpage images with an OpenAI-compatible vision model and redraw it on top of the original image.",
   "permissions": [
     "activeTab",
+    "clipboardRead",
+    "nativeMessaging",
     "storage",
     "tabs"
   ],

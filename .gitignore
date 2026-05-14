@@ -4,3 +4,5 @@ dist/
 output/
 .DS_Store
 **/.DS_Store
+native/macos-vision-ocr/.build/
+native/macos-vision-ocr/.swiftpm/

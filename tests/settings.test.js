@@ -73,4 +73,29 @@ describe("settings helpers", () => {
     expect(settings.iosOcrEndpoint).toBe("http://10.0.1.11:8000/upload");
     expect(denormalizeSettings(settings).iosOcrEndpoint).toBe("http://10.0.1.11:8000");
   });
+
+  test("preserves macOS Vision OCR settings and host name", () => {
+    const settings = normalizeSettings({
+      apiEndpoint: "https://api.openai.com/v1",
+      apiKey: "key",
+      macosVisionHostName: "com.example.ocr",
+      model: "gpt-5.4-mini",
+      targetLanguage: "Traditional Chinese",
+      useMacosVisionOcr: true
+    });
+
+    expect(settings.useMacosVisionOcr).toBe(true);
+    expect(settings.macosVisionHostName).toBe("com.example.ocr");
+    expect(denormalizeSettings(settings).macosVisionHostName).toBe("com.example.ocr");
+  });
+
+  test("keeps macOS Vision OCR and iOS OCR mutually exclusive", () => {
+    const settings = normalizeSettings({
+      useIosOcrServer: true,
+      useMacosVisionOcr: true
+    });
+
+    expect(settings.useMacosVisionOcr).toBe(true);
+    expect(settings.useIosOcrServer).toBe(false);
+  });
 });
