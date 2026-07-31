@@ -5,7 +5,10 @@ import {
   mergeMacosVisionTranslationResults,
   normalizeMacosVisionOcrResult
 } from "../src/shared/macos-vision-ocr.js";
-import { distributeTextAcrossBoxes } from "../src/shared/flow-text.js";
+import {
+  distributeTextAcrossBoxes,
+  resolveSharedFlowWidths
+} from "../src/shared/flow-text.js";
 
 describe("macOS Vision OCR helpers", () => {
   const nativeResponse = {
@@ -163,5 +166,21 @@ describe("macOS Vision OCR helpers", () => {
     });
 
     expect(assigned[1].length).toBeGreaterThan(7);
+  });
+
+  test("can pack more CJK text into a short first macOS Vision line using inferred group width", () => {
+    const boxes = [
+      { id: "box-0", width: 4 },
+      { id: "box-1", width: 8 },
+      { id: "box-2", width: 6 }
+    ];
+    const flowWidths = resolveSharedFlowWidths(boxes, { maxScale: 1.65 });
+    const assigned = distributeTextAcrossBoxes("不，筆電充電器不應該應該通用", boxes, {
+      resolveWidth: (_box, index) => flowWidths[index],
+      measureWidth: (value) => Array.from(value).length
+    });
+
+    expect(assigned[0]).toBe("不，筆電充電");
+    expect(assigned.join("")).toBe("不，筆電充電器不應該應該通用");
   });
 });

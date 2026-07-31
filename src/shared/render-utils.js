@@ -425,6 +425,24 @@ function resolveBlockMaxFontSize(block, maxFontSize) {
   return Math.max(11, Math.min(defaultMax, Math.round(estimatedFontSize * cjkScale * lineCountScale)));
 }
 
+function shouldUseSoftLineBreaks(block) {
+  if (!textContainsCjk(block?.translatedText)) {
+    return false;
+  }
+
+  const container = block?.style?.container || "auto";
+  return container === "image-text" || container === "caption-strip";
+}
+
+function resolveLayoutText(block) {
+  const text = String(block?.translatedText || "");
+  if (!shouldUseSoftLineBreaks(block)) {
+    return text;
+  }
+
+  return text.replace(/\s*\n+\s*/gu, "");
+}
+
 function createTextLayout(block, options, fixedFontSize) {
   const {
     lineHeightRatio = 1.18,
@@ -435,18 +453,19 @@ function createTextLayout(block, options, fixedFontSize) {
   const resolvedMinFontSize = typeof minFontSize === "function" ? minFontSize(block) : minFontSize;
   const textBox = getTextBox(block.bounds, block);
   const measure = (value, fontSize) => measureWidth(value, fontSize, block);
+  const layoutText = resolveLayoutText(block);
 
   if (fixedFontSize) {
     return {
       fontSize: fixedFontSize,
       lineHeight: fixedFontSize * lineHeightRatio,
-      lines: wrapTextToWidth(block.translatedText, textBox.width, (value) => measure(value, fixedFontSize)),
+      lines: wrapTextToWidth(layoutText, textBox.width, (value) => measure(value, fixedFontSize)),
       paddingX: textBox.paddingX,
       paddingY: textBox.paddingY
     };
   }
 
-  const fit = fitFontSize(block.translatedText, textBox, {
+  const fit = fitFontSize(layoutText, textBox, {
     lineHeightRatio,
     maxFontSize: resolveBlockMaxFontSize(block, maxFontSize),
     measureWidth: measure,

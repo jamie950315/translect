@@ -15,6 +15,23 @@ function appendToken(text, token) {
   return shouldInsertSpace(text, token) ? `${text} ${token}` : `${text}${token}`;
 }
 
+export function resolveSharedFlowWidths(boxes, options = {}) {
+  const maxScale = Number.isFinite(Number(options.maxScale)) ? Number(options.maxScale) : 1.65;
+  const widths = boxes.map((box) => Math.max(1, Number(box?.width) || 0));
+  const widest = Math.max(...widths, 1);
+
+  return widths.map((width) => Math.min(widest, width * maxScale));
+}
+
+export function distributeTextAcrossLineBlocks(blocks, options = {}) {
+  const flowText = blocks
+    .map((block) => String(block?.text || ""))
+    .join("")
+    .replace(/\s*\n+\s*/gu, "");
+
+  return distributeTextAcrossBoxes(flowText, blocks, options);
+}
+
 export function distributeTextAcrossBoxes(text, boxes, options = {}) {
   const measureWidth = options.measureWidth || (() => 0);
   const tokens = tokenizeText(text);

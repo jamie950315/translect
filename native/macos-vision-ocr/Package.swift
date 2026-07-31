@@ -16,6 +16,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "TranslectMacOSVisionOCR"
+        ),
+        .testTarget(
+            name: "TranslectMacOSVisionOCRTests",
+            dependencies: ["TranslectMacOSVisionOCR"]
         )
     ]
 )

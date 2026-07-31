@@ -186,6 +186,27 @@ describe("render utils", () => {
     expect(layouts[0].fontSize).toBeLessThanOrEqual(26);
   });
 
+  test("treats model line breaks as soft wrapping hints for CJK image text", () => {
+    const layouts = planTextLayouts(
+      [
+        {
+          bounds: { x: 54, y: 112, width: 265, height: 142 },
+          sourceLineCount: 3,
+          style: {
+            align: "center",
+            container: "image-text",
+            fontWeight: 620,
+            rotation: 0
+          },
+          translatedText: "不，筆電\n充電器不應該\n應該通用"
+        }
+      ],
+      { measureWidth }
+    );
+
+    expect(layouts[0].lines[0]).toContain("充電器");
+  });
+
   test("allows macOS Vision line boxes to use readable single-line text size", () => {
     const layouts = planTextLayouts(
       [

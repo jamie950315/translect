@@ -7,6 +7,7 @@ const rootDir = process.cwd();
 const srcDir = path.join(rootDir, "src");
 const distDir = path.join(rootDir, "dist");
 const watchMode = process.argv.includes("--watch");
+const safariBuild = process.argv.includes("--safari");
 
 const bundleConfig = {
   absWorkingDir: rootDir,
@@ -21,11 +22,14 @@ const bundleConfig = {
   outdir: "dist",
   platform: "browser",
   sourcemap: false,
-  target: ["chrome121"]
+  target: safariBuild ? ["safari17"] : ["chrome121"]
 };
 
 async function copyStaticFiles() {
   await mkdir(path.join(distDir, "popup"), { recursive: true });
+  await cp(path.join(srcDir, "icons"), path.join(distDir, "icons"), {
+    recursive: true
+  });
   await cp(path.join(srcDir, "popup", "popup.html"), path.join(distDir, "popup", "popup.html"));
   await cp(path.join(srcDir, "popup", "popup.css"), path.join(distDir, "popup", "popup.css"));
 

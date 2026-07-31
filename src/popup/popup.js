@@ -1,5 +1,8 @@
+import { installWebExtensionApiCompatibility } from "../shared/browser-compat.js";
 import { DEFAULT_SETTINGS, MESSAGE_TYPES, PAGE_ACTIONS } from "../shared/defaults.js";
 import { denormalizeSettings, normalizeSettings } from "../shared/settings.js";
+
+installWebExtensionApiCompatibility();
 
 function sendMessage(message) {
   return chrome.runtime.sendMessage(message);

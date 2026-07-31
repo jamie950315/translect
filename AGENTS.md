@@ -2,13 +2,13 @@
 
 ## Project Overview
 
-Translect is a Chromium Manifest V3 extension for translating text inside webpage images and drawing the translated text back over the original image.
+Translect is a Manifest V3 WebExtension for Chromium and macOS Safari that translates text inside webpage images and draws the translated text back over the original image.
 
 The project supports two translation flows:
 
 - Default vision mode: capture an image or viewport region, send it to an OpenAI-compatible vision model, parse translated text blocks, and render canvas overlays.
 - iOS OCR Server mode: send images to an iOS OCR Server for text and box coordinates, translate the extracted text with the OpenAI-compatible API, and merge the translated text back onto the OCR boxes.
-- macOS Vision OCR mode: send images to a local native messaging host, use Apple's Vision framework for OCR and text boxes on the Mac, translate the extracted text with the OpenAI-compatible API, and merge the translated text back onto the OCR boxes.
+- macOS Vision OCR mode: use Apple's Vision framework for OCR and text boxes on the Mac, translate the extracted text with the OpenAI-compatible API, and merge the translated text back onto the OCR boxes. Chromium sends requests to a local native messaging host; Safari sends them to the containing app extension.
 
 ## Important Files
 
@@ -22,10 +22,14 @@ The project supports two translation flows:
 - `src/shared/flow-text.js`: distributes translated OCR text across provider-supplied line boxes.
 - `src/shared/render-utils.js`: text tokenization, wrapping, fitting, and typography grouping helpers.
 - `src/shared/settings.js`: settings normalization and validation.
+- `src/shared/browser-compat.js`: aliases Safari's `browser` namespace for shared Chromium-style modules.
+- `src/shared/safari-manifest.js`: removes Safari-incompatible manifest fields during Safari packaging.
 - `scripts/build.mjs`: extension build script.
+- `scripts/build-safari.mjs`: builds Safari-targeted resources and synchronizes them into the Xcode project.
 - `scripts/verify-scenarios.mjs`: Playwright scenario verification with a local mock API.
 - `scripts/install-macos-vision-host.mjs`: builds and registers the macOS native messaging host.
 - `native/macos-vision-ocr/`: SwiftPM native host using Apple Vision OCR.
+- `safari/Translect/Translect/`: macOS-only Safari Web Extension Xcode project and native message handler.
 
 ## Development Commands
 
@@ -33,8 +37,10 @@ The project supports two translation flows:
 npm install
 npm test
 npm run build
+npm run build:safari
 npm run test:scenarios
 swift build --package-path native/macos-vision-ocr
+xcodebuild -project safari/Translect/Translect/Translect.xcodeproj -scheme Translect -configuration Debug CODE_SIGNING_ALLOWED=NO build
 ```
 
 ## Completion Standard
@@ -45,7 +51,8 @@ Before reporting work as complete:
 2. Run `npm run build`.
 3. Run `npm run test:scenarios` when behavior touches extension flow, image detection, overlays, settings, OCR, or translation routing.
 4. Run `swift build --package-path native/macos-vision-ocr` when behavior touches macOS Vision OCR.
-5. Inspect failures and fix them before marking the task complete.
+5. Run `npm run build:safari` and the Safari Xcode build when behavior touches Safari packaging or the Safari native OCR bridge.
+6. Inspect failures and fix them before marking the task complete.
 
 ## Repository Hygiene
 
@@ -59,3 +66,10 @@ Before reporting work as complete:
 - Keep translated macOS Vision OCR text inside the OCR frame box. If text must be clipped, prefer clipping over drawing outside Apple Vision coordinates.
 - When changing OCR text flow or overlay layout, verify with real Playwright screenshots against the iMessage fixtures in the manual gallery.
 - Keep API keys, tokens, cookies, and private browser data out of commits and logs.
+- Do not commit generated Safari Web Extension resources under `safari/Translect/Translect/Translect Extension/Resources/`; `npm run build:safari` and the Xcode build phase create them.
+
+## Current Implementation Status
+
+- The Safari build targets macOS 13+ and Safari 17+, with its own Xcode project at `safari/Translect/Translect/Translect.xcodeproj`.
+- Safari resources are rebuilt from the shared `src/` tree before every Xcode build.
+- `VisionOCR.swift` is shared by the Chromium native host and Safari's `SafariWebExtensionHandler`, so both return the same Apple Vision OCR response format.

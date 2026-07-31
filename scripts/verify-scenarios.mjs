@@ -54,6 +54,7 @@ const uploadedSourceFixtures = [
   "tesla-release-notes-source.png"
 ];
 let activeUploadedAssetName = "";
+let mockImageRequests = [];
 
 function contentTypeForPath(pathname) {
   if (pathname.endsWith(".html")) {
@@ -641,8 +642,13 @@ function mockTranslationForDimensions({ assetName = "", width, height }) {
 }
 
 function buildMockChatCompletion(imageDataUrl) {
+  const dimensions = pngDimensionsFromDataUrl(imageDataUrl);
+  mockImageRequests.push({
+    assetName: activeUploadedAssetName,
+    ...dimensions
+  });
   const translation = mockTranslationForDimensions({
-    ...pngDimensionsFromDataUrl(imageDataUrl),
+    ...dimensions,
     assetName: activeUploadedAssetName
   });
   return {
@@ -817,6 +823,29 @@ async function pageState(page) {
   }, { ROOT_ID });
 }
 
+async function installCaptureRootVisibilityProbe(page) {
+  await page.evaluate(({ ROOT_ID }) => {
+    window.__translectRootHiddenDuringCapture = false;
+    const observer = new MutationObserver(() => {
+      const root = document.getElementById(ROOT_ID);
+      if (root?.style.visibility === "hidden") {
+        window.__translectRootHiddenDuringCapture = true;
+      }
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["style"],
+      childList: true,
+      subtree: true
+    });
+    window.__translectRootVisibilityProbe = observer;
+  }, { ROOT_ID });
+}
+
+async function captureRootWasHidden(page) {
+  return page.evaluate(() => Boolean(window.__translectRootHiddenDuringCapture));
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -866,6 +895,12 @@ async function waitForBootstrapDefaults(serviceWorker) {
   }
 
   throw new Error("timeout:bootstrap-defaults");
+}
+
+function takeMockImageRequests() {
+  const requests = mockImageRequests;
+  mockImageRequests = [];
+  return requests;
 }
 
 function assertOverlayStyle(state, expectedCount) {
@@ -939,11 +974,28 @@ async function runSuite() {
 
     {
       const page = await openPage(context, `${server.origin}/scenario-page.html`);
+      await installCaptureRootVisibilityProbe(page);
       await dispatchToActiveTab(serviceWorker, "fire", PAGE_ACTIONS.AUTO_TRANSLATE_VISIBLE);
       const state = await waitForOverlayCount(page, 2, "auto-scenario-overlays");
+      assert.equal(await captureRootWasHidden(page), true);
       assertOverlayStyle(state, 2);
       await page.screenshot({ path: path.join(outputDir, "auto-after.png") });
       summary.push({ scenario: "auto_visible_images", state });
+      await page.close();
+    }
+
+    {
+      takeMockImageRequests();
+      const page = await openPage(context, `${server.origin}/direct-source.html`);
+      await dispatchToActiveTab(serviceWorker, "fire", PAGE_ACTIONS.AUTO_TRANSLATE_VISIBLE);
+      const state = await waitForOverlayCount(page, 1, "direct-source-overlay");
+      const requests = takeMockImageRequests();
+      assert.ok(
+        requests.some((request) => request.width === 640 && request.height === 180),
+        `expected direct 640x180 source image, got ${JSON.stringify(requests)}`
+      );
+      assertOverlayStyle(state, 1);
+      summary.push({ scenario: "auto_uses_direct_image_source", state });
       await page.close();
     }
 

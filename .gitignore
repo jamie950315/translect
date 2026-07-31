@@ -6,3 +6,6 @@ output/
 **/.DS_Store
 native/macos-vision-ocr/.build/
 native/macos-vision-ocr/.swiftpm/
+safari/.extension-resources/
+safari/Translect/Translect/Translect Extension/Resources/
+safari/Translect/Translect/Translect.xcodeproj/xcuserdata/

@@ -1,3 +1,4 @@
+import { installWebExtensionApiCompatibility } from "../shared/browser-compat.js";
 import {
   MESSAGE_TYPES,
   PAGE_ACTIONS
@@ -30,15 +31,23 @@ import {
   dedupeImageElementsByVisualRect,
   isAutoTranslateCandidate
 } from "./image-candidate.js";
+import { canUseDirectImageSource, imageSourceUrl } from "./image-source.js";
 import { shouldReplaceOverlayRect } from "./overlay-dedupe.js";
 import { makeRedditTranslationCache } from "./reddit-media-cache.js";
 import {
   planTextLayouts,
   resolveReadableFontWeight,
-  resolveReadableStrokeWidth
+  resolveReadableStrokeWidth,
+  textContainsCjk
 } from "../shared/render-utils.js";
-import { distributeTextAcrossBoxes } from "../shared/flow-text.js";
+import {
+  distributeTextAcrossLineBlocks,
+  distributeTextAcrossBoxes,
+  resolveSharedFlowWidths
+} from "../shared/flow-text.js";
 import { normalizeSettings } from "../shared/settings.js";
+
+installWebExtensionApiCompatibility();
 
 const ROOT_ID = "__translect-root";
 const STYLE_ID = "__translect-styles";
@@ -514,12 +523,12 @@ async function loadImage(source) {
 }
 
 async function captureSnapshot() {
-  const overlayNodes = [...state.overlayEntries].map((entry) => entry.node);
-  const previousVisibility = overlayNodes.map((node) => node.style.visibility);
+  const root = document.getElementById(ROOT_ID);
+  const previousRootVisibility = root?.style.visibility || "";
 
   try {
-    for (const node of overlayNodes) {
-      node.style.visibility = "hidden";
+    if (root) {
+      root.style.visibility = "hidden";
     }
     await waitForNextPaint();
 
@@ -538,9 +547,9 @@ async function captureSnapshot() {
       scaleY: image.height / viewport.height
     };
   } finally {
-    overlayNodes.forEach((node, index) => {
-      node.style.visibility = previousVisibility[index] || "";
-    });
+    if (root) {
+      root.style.visibility = previousRootVisibility;
+    }
   }
 }
 
@@ -569,6 +578,44 @@ function cropRectFromSnapshot(snapshot, rect) {
   return {
     canvas,
     dataUrl: canvas.toDataURL("image/png")
+  };
+}
+
+async function fetchImageSourceDataUrl(imageElement) {
+  if (!canUseDirectImageSource(imageElement)) {
+    return null;
+  }
+
+  let response;
+  try {
+    response = await sendMessage({
+      type: MESSAGE_TYPES.FETCH_IMAGE_DATA,
+      url: imageSourceUrl(imageElement)
+    });
+  } catch {
+    return null;
+  }
+
+  if (!response?.ok || !response.dataUrl) {
+    return null;
+  }
+
+  return response.dataUrl;
+}
+
+async function imageDataForElement(imageElement, snapshot = null) {
+  const directDataUrl = await fetchImageSourceDataUrl(imageElement);
+  if (directDataUrl) {
+    return {
+      dataUrl: directDataUrl,
+      source: "image"
+    };
+  }
+
+  const fallbackSnapshot = snapshot || (await captureSnapshot());
+  return {
+    ...cropRectFromSnapshot(fallbackSnapshot, imageElement.getBoundingClientRect()),
+    source: "screenshot"
   };
 }
 
@@ -718,7 +765,7 @@ function expandRectWithin(rect, padding, bounds) {
   };
 }
 
-function resolvePlacementRect(originalRect, textArea, containerKind) {
+function resolvePlacementRect(originalRect, textArea, containerKind, block = null) {
   if (!textArea.inkRect) {
     return originalRect;
   }
@@ -728,6 +775,10 @@ function resolvePlacementRect(originalRect, textArea, containerKind) {
   }
 
   if (containerKind === "speech-bubble") {
+    return originalRect;
+  }
+
+  if (containerKind === "image-text" && Number(block?.sourceLineCount || 0) > 1) {
     return originalRect;
   }
 
@@ -1095,6 +1146,125 @@ function macosVisionFlowTextBox(rect) {
   };
 }
 
+function imageTextFlowPackingFontSize(rect) {
+  return Math.max(12, Math.floor(rect.height * 0.42));
+}
+
+function imageTextFlowTextBox(rect) {
+  const paddingX = Math.max(4, rect.width * 0.035);
+  return {
+    width: Math.max(18, rect.width - paddingX * 2)
+  };
+}
+
+function canFlowImageTextLines(first, second) {
+  if (first.block.provider || second.block.provider) {
+    return false;
+  }
+
+  if (first.resolvedStyle.container !== "image-text" || second.resolvedStyle.container !== "image-text") {
+    return false;
+  }
+
+  if (first.resolvedStyle.align !== "center" || second.resolvedStyle.align !== "center") {
+    return false;
+  }
+
+  if (!textContainsCjk(first.block.translatedText) || !textContainsCjk(second.block.translatedText)) {
+    return false;
+  }
+
+  const firstRect = first.rect;
+  const secondRect = second.rect;
+  const verticalGap = secondRect.y - (firstRect.y + firstRect.height);
+  const averageHeight = (firstRect.height + secondRect.height) / 2;
+  if (verticalGap < -averageHeight * 0.35 || verticalGap > averageHeight * 1.1) {
+    return false;
+  }
+
+  const firstCenter = firstRect.x + firstRect.width / 2;
+  const secondCenter = secondRect.x + secondRect.width / 2;
+  const centerGap = Math.abs(firstCenter - secondCenter);
+  const widest = Math.max(firstRect.width, secondRect.width);
+
+  return centerGap <= Math.max(42, widest * 0.22);
+}
+
+function collectImageTextFlowGroups(renderBlocks) {
+  const sorted = renderBlocks
+    .map((item, index) => ({ index, item }))
+    .sort((first, second) => first.item.rect.y - second.item.rect.y || first.item.rect.x - second.item.rect.x);
+  const groups = [];
+  let currentGroup = [];
+
+  for (const entry of sorted) {
+    const previous = currentGroup.at(-1);
+    if (previous && canFlowImageTextLines(previous.item, entry.item)) {
+      currentGroup.push(entry);
+    } else {
+      if (currentGroup.length > 1) {
+        groups.push(currentGroup);
+      }
+      currentGroup = [entry];
+    }
+  }
+
+  if (currentGroup.length > 1) {
+    groups.push(currentGroup);
+  }
+
+  return groups;
+}
+
+function applyImageTextLineFlow(renderBlocks, outputCtx) {
+  const groups = collectImageTextFlowGroups(renderBlocks);
+  if (!groups.length) {
+    return renderBlocks;
+  }
+
+  const nextBlocks = renderBlocks.slice();
+
+  for (const [groupIndex, group] of groups.entries()) {
+    const ordered = group
+      .slice()
+      .sort((first, second) => first.item.rect.y - second.item.rect.y || first.item.rect.x - second.item.rect.x);
+    const boxes = ordered.map(({ item }) => ({
+      ...imageTextFlowTextBox(item.rect),
+      item,
+      text: item.block.translatedText
+    }));
+    const assignments = distributeTextAcrossLineBlocks(boxes, {
+      measureWidth(value, box) {
+        const item = box.item;
+        const fontSize = imageTextFlowPackingFontSize(item.rect);
+        const fontWeight = resolveReadableFontWeight(
+          item.resolvedStyle.fontWeight,
+          value,
+          item.resolvedStyle.container
+        );
+        outputCtx.font = `${fontWeight} ${fontSize}px Arial, "Helvetica Neue", Helvetica, sans-serif`;
+        return outputCtx.measureText(value).width;
+      }
+    });
+
+    for (const [assignmentIndex, assignment] of assignments.entries()) {
+      const target = ordered[assignmentIndex];
+      const groupId = target.item.block.groupId || `image-text-flow:${groupIndex}`;
+      nextBlocks[target.index] = {
+        ...target.item,
+        block: {
+          ...target.item.block,
+          groupId,
+          sourceLineCount: 1,
+          translatedText: assignment
+        }
+      };
+    }
+  }
+
+  return nextBlocks;
+}
+
 function applyMacosVisionTextFlow(renderBlocks, outputCtx) {
   const groups = new Map();
 
@@ -1132,7 +1302,13 @@ function applyMacosVisionTextFlow(renderBlocks, outputCtx) {
       ...macosVisionFlowTextBox(item.rect),
       item
     }));
+    const flowWidths = textContainsCjk(flowText)
+      ? resolveSharedFlowWidths(boxes, { maxScale: 1.65 })
+      : boxes.map((box) => box.width);
     const assignments = distributeTextAcrossBoxes(flowText, boxes, {
+      resolveWidth(_box, index) {
+        return flowWidths[index];
+      },
       measureWidth(value, box) {
         const item = box.item;
         const fontSize = macosVisionFlowPackingFontSize(item.rect);
@@ -1193,7 +1369,7 @@ async function renderTranslatedCanvas(imageDataUrl, translation) {
           );
       const placementRect = usesProviderOcr
         ? rect
-        : resolvePlacementRect(rect, textArea, containerKind);
+        : resolvePlacementRect(rect, textArea, containerKind, block);
       const backgroundColor =
         textArea.backgroundColor || block.style.backgroundColor || sampleRegionColor(sourceCtx, placementRect);
       const textColor = readableTextColor(
@@ -1217,6 +1393,7 @@ async function renderTranslatedCanvas(imageDataUrl, translation) {
       };
     });
   renderBlocks = applyMacosVisionTextFlow(renderBlocks, outputCtx);
+  renderBlocks = applyImageTextLineFlow(renderBlocks, outputCtx);
 
   const textLayouts = planTextLayouts(
     renderBlocks.map(({ block, rect, resolvedStyle }) => ({
@@ -1389,8 +1566,7 @@ async function translateImageElement(imageElement, options = {}) {
   state.visualInFlightFingerprints.add(visualFingerprint);
 
   try {
-    const snapshot = options.snapshot || (await captureSnapshot());
-    const crop = cropRectFromSnapshot(snapshot, rect);
+    const crop = await imageDataForElement(imageElement, options.snapshot || null);
     const cachedTranslation = !options.force
       ? findCachedRedditTranslation(imageElement, settings)
       : null;
@@ -1479,7 +1655,7 @@ async function prepareImageBatchJob(imageElement, settings, snapshot, force) {
     : null;
 
   if (cachedTranslation?.blocks?.length) {
-    const crop = cropRectFromSnapshot(snapshot, rect);
+    const crop = await imageDataForElement(imageElement, snapshot);
     const canvas = await renderTranslatedCanvas(crop.dataUrl, cachedTranslation);
     attachOverlay({
       anchorElement: imageElement,
@@ -1492,7 +1668,7 @@ async function prepareImageBatchJob(imageElement, settings, snapshot, force) {
 
   state.inFlightElements.add(imageElement);
   state.visualInFlightFingerprints.add(visualFingerprint);
-  const crop = cropRectFromSnapshot(snapshot, rect);
+  const crop = await imageDataForElement(imageElement, snapshot);
 
   return {
     crop,
@@ -1599,7 +1775,7 @@ async function applyCachedRedditTranslation(imageElement, settings, snapshot) {
   state.visualInFlightFingerprints.add(visualFingerprint);
   try {
     const fingerprint = measureImageFingerprint(imageElement, settings);
-    const crop = cropRectFromSnapshot(snapshot, rect);
+    const crop = await imageDataForElement(imageElement, snapshot);
     const canvas = await renderTranslatedCanvas(crop.dataUrl, cachedTranslation);
     attachOverlay({
       anchorElement: imageElement,
@@ -1628,10 +1804,9 @@ async function applyCachedRedditTranslationsToVisibleImages() {
     return;
   }
 
-  const snapshot = await captureSnapshot();
   for (const image of images) {
     try {
-      await applyCachedRedditTranslation(image, settings, snapshot);
+      await applyCachedRedditTranslation(image, settings, null);
     } catch (error) {
       console.warn("Cached Reddit image translation failed for one image.", error);
     }
@@ -1657,17 +1832,15 @@ async function translateVisibleImages(force = false) {
   }
 
   showToast(`Translating ${images.length} visible image${images.length > 1 ? "s" : ""}...`);
-  const snapshot = await captureSnapshot();
-
   if (settings.useIosOcrServer) {
-    await translateVisibleImagesWithIosOcr(images, settings, snapshot, force);
+    await translateVisibleImagesWithIosOcr(images, settings, null, force);
     showToast("Visible image translation finished.");
     return;
   }
 
   for (const image of images) {
     try {
-      await translateImageElement(image, { force, snapshot });
+      await translateImageElement(image, { force });
     } catch (error) {
       console.warn("Image translation failed for one image.", error);
     }
@@ -1931,8 +2104,8 @@ async function applySettings() {
   }
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type !== "page-action") {
+function handleRuntimeMessage(message, _sender, sendResponse) {
+  if (message?.type !== MESSAGE_TYPES.PAGE_ACTION && message?.type !== "page-action") {
     return false;
   }
 
@@ -1969,7 +2142,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
 
   return true;
-});
+}
+
+if (window.__translectRuntimeMessageHandler) {
+  chrome.runtime.onMessage.removeListener(window.__translectRuntimeMessageHandler);
+}
+window.__translectRuntimeMessageHandler = handleRuntimeMessage;
+chrome.runtime.onMessage.addListener(handleRuntimeMessage);
 
 if (!state.initialized) {
   state.initialized = true;

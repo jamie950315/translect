@@ -4,10 +4,19 @@
   "version": "0.1.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApJLLQUiOBQvC6XbmWuhXugJI/0QHI3Ue7ZRpIYDpOqp5ouus6s1IRJYROzgAoS+EJ9JmB8KEIPdiWEn+jsCQr+6FrcNeaiPFYx2boUmqpeilzT8XCkDxkPw/kBp4tme+zImyXoja3o9ZqddQag5juT+w7QPengivu3bYmalzaX/YR41zXT80byJmispdvGGDNVLk5YjwtjOl7yUhhf3Mr7NZfChVDzALS4S9fMXUE1vOKFhfUt0it5MmuJ+ftlgAa5iG3bqFXBgeUlVhaEvjVTw73800kJ1hYQeNKLTLg502iGnxemNpwCWlSMrjVBNpzn0e8Bh6Pg5HV3RAOYv0KwIDAQAB",
   "description": "Translate text inside webpage images with an OpenAI-compatible vision model and redraw it on top of the original image.",
+  "icons": {
+    "16": "icons/translect-16.png",
+    "32": "icons/translect-32.png",
+    "48": "icons/translect-48.png",
+    "128": "icons/translect-128.png",
+    "256": "icons/translect-256.png",
+    "512": "icons/translect-512.png"
+  },
   "permissions": [
     "activeTab",
     "clipboardRead",
     "nativeMessaging",
+    "scripting",
     "storage",
     "tabs"
   ],
@@ -19,6 +28,10 @@
     "type": "module"
   },
   "action": {
+    "default_icon": {
+      "16": "icons/translect-16.png",
+      "32": "icons/translect-32.png"
+    },
     "default_title": "Translect",
     "default_popup": "popup/popup.html"
   },

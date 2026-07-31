@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title>Translect</title>
+  <defs>
+    <linearGradient id="surface" x1="72" y1="60" x2="442" y2="456" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff8ed"/>
+      <stop offset="1" stop-color="#ffe1cf"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="110" y1="124" x2="408" y2="397" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#e55a3e"/>
+      <stop offset="1" stop-color="#a13f2c"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#16212c"/>
+  <rect x="72" y="76" width="368" height="360" rx="68" fill="url(#surface)"/>
+  <path d="M137 180c0-22.1 17.9-40 40-40h158c22.1 0 40 17.9 40 40v80c0 22.1-17.9 40-40 40h-92l-56 44v-44h-10c-22.1 0-40-17.9-40-40z" fill="url(#accent)"/>
+  <path d="M216 187h82M257 158v104" stroke="#fff8ed" stroke-width="25" stroke-linecap="round"/>
+  <path d="M173 354c0-16.6 13.4-30 30-30h106c16.6 0 30 13.4 30 30v18c0 16.6-13.4 30-30 30h-53l-34 26v-26h-19c-16.6 0-30-13.4-30-30z" fill="#16212c"/>
+  <path d="M208 355h94M231 337l-20 54M278 337l20 54M238 377h33" stroke="#fff8ed" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

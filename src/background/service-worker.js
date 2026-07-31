@@ -1,3 +1,4 @@
+import { installWebExtensionApiCompatibility } from "../shared/browser-compat.js";
 import {
   COMMANDS,
   DEFAULT_SETTINGS,
@@ -5,6 +6,7 @@ import {
   PAGE_ACTIONS,
   STORAGE_KEY
 } from "../shared/defaults.js";
+import { getExtensionCommands } from "../shared/command-support.js";
 import {
   buildChatCompletionsPayload,
   extractAssistantText,
@@ -25,6 +27,8 @@ import {
   normalizeSettings
 } from "../shared/settings.js";
 import { createCaptureVisibleTabLimiter } from "./capture-rate-limit.js";
+
+installWebExtensionApiCompatibility();
 
 const scheduleVisibleTabCapture = createCaptureVisibleTabLimiter();
 
@@ -75,12 +79,37 @@ async function getActiveTab() {
   return tab;
 }
 
+async function injectCurrentContentScript(tab) {
+  if (!tab?.id || !/^https?:|^file:/u.test(tab.url || "")) {
+    return;
+  }
+
+  try {
+    await chrome.scripting.executeScript({
+      files: ["content.js"],
+      target: { tabId: tab.id }
+    });
+  } catch (error) {
+    console.warn("Could not inject the current Translect content script.", error);
+  }
+}
+
 async function dispatchToActiveTab(action) {
   const tab = await getActiveTab();
-  return chrome.tabs.sendMessage(tab.id, {
-    type: "page-action",
-    action
-  });
+  await injectCurrentContentScript(tab);
+
+  try {
+    return await chrome.tabs.sendMessage(tab.id, {
+      type: MESSAGE_TYPES.PAGE_ACTION,
+      action
+    });
+  } catch (error) {
+    console.warn("Current Translect content script did not answer; trying legacy channel.", error);
+    return chrome.tabs.sendMessage(tab.id, {
+      type: "page-action",
+      action
+    });
+  }
 }
 
 function buildRequestHeaders(apiKey) {
@@ -348,6 +377,42 @@ async function captureVisibleTab(sender) {
   );
 }
 
+function arrayBufferToBase64(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer);
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function fetchImageDataUrl(url) {
+  if (/^data:image\//i.test(url || "")) {
+    return url;
+  }
+
+  if (!/^https?:\/\//i.test(url || "")) {
+    throw new Error("Unsupported image URL.");
+  }
+
+  const response = await fetch(url, {
+    cache: "force-cache",
+    credentials: "omit"
+  });
+  if (!response.ok) {
+    throw new Error(`Could not fetch image (${response.status}).`);
+  }
+
+  const blob = await response.blob();
+  const mimeType = blob.type || response.headers.get("Content-Type") || "image/png";
+  if (!/^image\//i.test(mimeType)) {
+    throw new Error("Fetched resource is not an image.");
+  }
+
+  return `data:${mimeType};base64,${arrayBufferToBase64(await blob.arrayBuffer())}`;
+}
+
 async function toggleAlwaysAutoDetect() {
   const current = await getStoredSettings();
   const updated = await saveStoredSettings({
@@ -377,25 +442,27 @@ chrome.storage.onChanged.addListener(async (changes, areaName) => {
   }
 });
 
-chrome.commands.onCommand.addListener(async (command) => {
-  try {
-    if (command === COMMANDS.ACTIVATE_TRANSLATION) {
-      const settings = await getStoredSettings();
-      await dispatchToActiveTab(
-        settings.triggerUsesAutoMode
-          ? PAGE_ACTIONS.AUTO_TRANSLATE_VISIBLE
-          : PAGE_ACTIONS.START_MANUAL_SELECTION
-      );
-      return;
-    }
+if (chrome.commands?.onCommand?.addListener) {
+  chrome.commands.onCommand.addListener(async (command) => {
+    try {
+      if (command === COMMANDS.ACTIVATE_TRANSLATION) {
+        const settings = await getStoredSettings();
+        await dispatchToActiveTab(
+          settings.triggerUsesAutoMode
+            ? PAGE_ACTIONS.AUTO_TRANSLATE_VISIBLE
+            : PAGE_ACTIONS.START_MANUAL_SELECTION
+        );
+        return;
+      }
 
-    if (command === COMMANDS.TOGGLE_ALWAYS_AUTO_DETECT) {
-      await toggleAlwaysAutoDetect();
+      if (command === COMMANDS.TOGGLE_ALWAYS_AUTO_DETECT) {
+        await toggleAlwaysAutoDetect();
+      }
+    } catch (error) {
+      console.warn("Command handling failed.", error);
     }
-  } catch (error) {
-    console.warn("Command handling failed.", error);
-  }
-});
+  });
+}
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   async function handle() {
@@ -409,9 +476,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await dispatchToActiveTab(message.action);
         return {};
       }
+      case MESSAGE_TYPES.FETCH_IMAGE_DATA: {
+        return {
+          dataUrl: await fetchImageDataUrl(message.url)
+        };
+      }
       case MESSAGE_TYPES.GET_COMMANDS: {
         return {
-          commands: await chrome.commands.getAll()
+          commands: await getExtensionCommands(chrome.commands)
         };
       }
       case MESSAGE_TYPES.GET_SETTINGS: {

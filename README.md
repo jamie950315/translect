@@ -1,6 +1,6 @@
 # Translect
 
-Translect is a Chromium extension that translates text inside webpage images with an OpenAI-compatible vision endpoint, then redraws the translated text directly over the original image.
+Translect is a WebExtension for Chromium and macOS Safari that translates text inside webpage images with an OpenAI-compatible vision endpoint, then redraws the translated text directly over the original image.
 
 ## Features
 
@@ -13,17 +13,19 @@ Translect is a Chromium extension that translates text inside webpage images wit
 - Configurable target language, API key, API endpoint URL, and model ID
 - Optional iOS OCR Server mode for OCR and text-box positioning
 - Optional macOS Vision OCR mode through a local native messaging host
+- Native macOS Safari app and Safari Web Extension project
 - Batched text-only translation when an OCR provider mode is enabled
 - Default model: `gpt-5.4-mini`
 
 ## Requirements
 
-- A Chromium-based browser that supports Manifest V3 extensions.
+- A Chromium-based browser that supports Manifest V3 extensions, or macOS 13+ with Safari 17+.
 - An OpenAI-compatible `/chat/completions` endpoint and API key.
 - Node.js for development, builds, and Playwright scenario tests.
 - Swift toolchain on macOS when using the macOS Vision OCR native host.
+- Xcode on macOS when building the Safari app.
 
-The extension stores settings in Chromium extension storage. API keys are not committed by this repository and should not be checked into source control.
+The extension stores settings in browser extension storage. API keys are not committed by this repository and should not be checked into source control.
 
 ## How It Works
 
@@ -57,7 +59,7 @@ The configured iOS OCR endpoint can be either the base server URL or the upload 
 
 ### macOS Vision OCR Mode
 
-When macOS Vision OCR mode is enabled, Translect uses Chrome Native Messaging to call a local Swift helper. The helper runs Apple's Vision framework on the Mac, returns text and bounding boxes, and Translect sends only the detected text to the translation endpoint.
+When macOS Vision OCR mode is enabled, Translect uses Apple's Vision framework on the Mac, returns text and bounding boxes, and Translect sends only the detected text to the translation endpoint. Chromium uses a local native messaging host; Safari sends the request directly to the native code bundled in its containing Translect app.
 
 This mode does not require another iOS device and keeps OCR on the local Mac.
 
@@ -100,7 +102,21 @@ The unpacked extension output is written to `dist/`.
 
 `npm run test:scenarios` builds and loads the extension in Playwright with a local mock API, then verifies manual selection, auto-detect, always-on mode, scrolling, inserted images, no-image pages, and fixture-based image overlays.
 
-## macOS Vision Native Host
+## Build and Run in Safari on macOS
+
+The Safari version targets macOS 13+ and Safari 17+. It shares the same JavaScript, popup, settings, translation flow, and overlay renderer as the Chromium build.
+
+```bash
+npm install
+npm run build:safari
+open safari/Translect/Translect/Translect.xcodeproj
+```
+
+In Xcode, select a signing team for both the `Translect` app and `Translect Extension` targets, then run the `Translect` scheme. If `com.translect.safari` is unavailable to your signing team, change the app identifier and keep the extension identifier as `<your-app-identifier>.Extension`. Enable Translect in Safari’s extension settings and grant it access to the websites you want to translate. Choose “All Websites” if you want automatic image translation everywhere.
+
+The Safari Xcode project refreshes its extension resources from `src/` before every build. Run `npm run build:safari` when you want to refresh the resources without opening Xcode.
+
+## macOS Vision OCR in Chromium
 
 Build the Swift helper directly:
 
@@ -126,6 +142,8 @@ The installer builds the native host in release mode and writes a Native Messagi
 
 If Chrome reports that the native messaging host is missing, reinstall with the extension ID shown in the currently loaded unpacked extension. Extension IDs change when the extension is loaded from a different path.
 
+Safari does not need this installer. Its Xcode project includes the Apple Vision OCR bridge, and Safari routes native messages to the containing Translect app automatically.
+
 ## Load In Chromium
 
 1. Run `npm run build`
@@ -141,7 +159,7 @@ The extension ships with:
 - `Ctrl+Shift+L` on Windows/Linux
 - `Command+Shift+L` on macOS
 
-You can customize shortcuts at `chrome://extensions/shortcuts`.
+You can customize shortcuts in your browser’s extension settings.
 
 The always-on auto-detect toggle also has a default shortcut:
 
@@ -154,7 +172,7 @@ The always-on auto-detect toggle also has a default shortcut:
 - Manual selection mode can translate any visible screen region, including text embedded in complex layouts.
 - The extension currently targets standard webpage images and visible page regions, not browser-internal pages such as `chrome://`.
 - The extension requires an OpenAI-compatible endpoint and API key for real translations.
-- macOS Vision OCR requires the native host to be installed for the active extension ID.
+- macOS Vision OCR requires the native host to be installed for the active extension ID in Chromium. Safari includes the OCR bridge in the Translect app.
 - macOS Vision OCR uses Apple Vision only for OCR and text-box coordinates. Translation still goes through the configured OpenAI-compatible endpoint.
 - iOS OCR Server mode uses the iOS server only for OCR and text-box coordinates. Translation still goes through the configured OpenAI-compatible endpoint.
 - Generated files such as `dist/`, `.tmp/`, and Playwright output are not committed.

@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Chromium extension for translating text inside webpage images with an OpenAI-compatible vision endpoint.",
+  "description": "Chromium and macOS Safari WebExtension for translating text inside webpage images with an OpenAI-compatible vision endpoint.",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:safari": "node scripts/build-safari.mjs",
     "dev": "node scripts/build.mjs --watch",
     "install:macos-ocr-host": "node scripts/install-macos-vision-host.mjs",
     "test": "vitest run",

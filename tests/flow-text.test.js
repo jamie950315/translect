@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 
-import { distributeTextAcrossBoxes } from "../src/shared/flow-text.js";
+import {
+  distributeTextAcrossBoxes,
+  distributeTextAcrossLineBlocks
+} from "../src/shared/flow-text.js";
 
 describe("flow text distribution", () => {
   test("does not let a narrow OCR box consume text meant for later boxes", () => {
@@ -31,5 +34,24 @@ describe("flow text distribution", () => {
     expect(assignments[0].length).toBeLessThanOrEqual(16);
     expect(assignments[1].length).toBeLessThanOrEqual(16);
     expect(assignments.join("")).toContain("電話號碼");
+  });
+
+  test("redistributes CJK text across model-split image text lines", () => {
+    const assignments = distributeTextAcrossLineBlocks(
+      [
+        { text: "不，筆電", width: 11 },
+        { text: "充電器不應該", width: 14 },
+        { text: "應該通用", width: 10 }
+      ],
+      {
+        measureWidth(value) {
+          return Array.from(value).length;
+        }
+      }
+    );
+
+    expect(assignments[0]).not.toBe("不，筆電");
+    expect(assignments[0]).toContain("充電");
+    expect(assignments.join("")).toBe("不，筆電充電器不應該應該通用");
   });
 });
