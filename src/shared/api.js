@@ -47,10 +47,20 @@ export function buildSystemPrompt(targetLanguage) {
   ].join("\n");
 }
 
+export function buildChatCompletionSamplingOptions(model) {
+  const modelId = String(model || "")
+    .trim()
+    .toLowerCase()
+    .split("/")
+    .at(-1);
+
+  return /^gpt-5(?:[._-]|$)/.test(modelId) ? {} : { temperature: 0.1 };
+}
+
 export function buildChatCompletionsPayload({ imageDataUrl, model, targetLanguage }) {
   return {
     model,
-    temperature: 0.1,
+    ...buildChatCompletionSamplingOptions(model),
     response_format: {
       type: "json_object"
     },

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   denormalizeSettings,
+  getSettingsValidationError,
   normalizeApiEndpoint,
   normalizeIosOcrEndpoint,
   normalizeSettings,
@@ -97,5 +98,40 @@ describe("settings helpers", () => {
 
     expect(settings.useMacosVisionOcr).toBe(true);
     expect(settings.useIosOcrServer).toBe(false);
+  });
+
+  test("keeps Apple Intelligence mutually exclusive with remote OCR providers", () => {
+    const settings = normalizeSettings({
+      useAppleIntelligence: true,
+      useIosOcrServer: true,
+      useMacosVisionOcr: true
+    });
+
+    expect(settings.useAppleIntelligence).toBe(true);
+    expect(settings.useMacosVisionOcr).toBe(false);
+    expect(settings.useIosOcrServer).toBe(false);
+  });
+
+  test("does not require remote API credentials in Apple Intelligence mode", () => {
+    const settings = normalizeSettings({
+      apiEndpoint: "",
+      apiKey: "",
+      model: "",
+      targetLanguage: "Traditional Chinese",
+      useAppleIntelligence: true
+    });
+
+    expect(settingsAreReady(settings)).toBe(true);
+    expect(getSettingsValidationError(settings)).toBe("");
+  });
+
+  test("still requires a target language in Apple Intelligence mode", () => {
+    const settings = {
+      ...normalizeSettings({ useAppleIntelligence: true }),
+      targetLanguage: ""
+    };
+
+    expect(settingsAreReady(settings)).toBe(false);
+    expect(getSettingsValidationError(settings)).toBe("Target language is required.");
   });
 });

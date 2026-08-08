@@ -9,6 +9,7 @@ import {
   rectIsLargeEnough
 } from "../shared/geometry.js";
 import { configureOverlayCanvas } from "./overlay-canvas.js";
+import { scheduleOverlayPositionRefresh } from "./overlay-position.js";
 import {
   getCanvasContext2d,
   getReadableCanvasContext2d
@@ -43,6 +44,7 @@ import {
 import {
   distributeTextAcrossLineBlocks,
   distributeTextAcrossBoxes,
+  resolveMacosVisionFlowTextBox,
   resolveSharedFlowWidths
 } from "../shared/flow-text.js";
 import { normalizeSettings } from "../shared/settings.js";
@@ -285,6 +287,10 @@ function measureImageFingerprint(imageElement, settings) {
 }
 
 function translationProviderKey(settings) {
+  if (settings.useAppleIntelligence) {
+    return "apple-intelligence:local";
+  }
+
   if (settings.useMacosVisionOcr) {
     return `macos-vision:${settings.macosVisionHostName || ""}`;
   }
@@ -429,24 +435,10 @@ function candidateImages() {
   return dedupeImageElementsByVisualRect(candidates);
 }
 
-function refreshOverlayPositions() {
-  for (const entry of state.overlayEntries) {
-    const rect = entry.getRect();
-    if (!rect || rect.width <= 0 || rect.height <= 0) {
-      entry.node.style.display = "none";
-      continue;
-    }
-
-    entry.node.style.display = "block";
-    entry.node.style.left = `${rect.x}px`;
-    entry.node.style.top = `${rect.y}px`;
-    entry.node.style.width = `${rect.width}px`;
-    entry.node.style.height = `${rect.height}px`;
-  }
-}
-
 function scheduleOverlayRefresh() {
-  window.requestAnimationFrame(refreshOverlayPositions);
+  scheduleOverlayPositionRefresh(state.overlayEntries, (callback) =>
+    window.requestAnimationFrame(callback)
+  );
 }
 
 function currentOverlayEntriesForRect(rect) {
@@ -867,7 +859,10 @@ function drawSolidCover(outputCtx, rect, backgroundColor, backgroundOpacity, con
 function drawCompactOcrCover(outputCtx, rect, backgroundColor) {
   const padX = Math.max(3, Math.round(rect.width * 0.018));
   const padY = Math.max(2, Math.round(rect.height * 0.06));
-  outputCtx.fillStyle = rgbaString(backgroundColor, 0.82);
+  outputCtx.fillStyle = rgbaString(
+    backgroundColor,
+    resolveCoverOpacity(0.82, { requireOpaque: true })
+  );
   roundRectPath(
     outputCtx,
     -rect.width / 2 - padX,
@@ -1139,13 +1134,6 @@ function macosVisionFlowPackingFontSize(rect) {
   return Math.max(16, Math.floor(rect.height * 0.7));
 }
 
-function macosVisionFlowTextBox(rect) {
-  const paddingX = Math.max(2, rect.width * 0.02);
-  return {
-    width: Math.max(18, rect.width - paddingX * 2)
-  };
-}
-
 function imageTextFlowPackingFontSize(rect) {
   return Math.max(12, Math.floor(rect.height * 0.42));
 }
@@ -1299,11 +1287,11 @@ function applyMacosVisionTextFlow(renderBlocks, outputCtx) {
       });
     const flowText = ordered[0].item.block.flowText;
     const boxes = ordered.map(({ item }) => ({
-      ...macosVisionFlowTextBox(item.rect),
+      ...resolveMacosVisionFlowTextBox(item.rect),
       item
     }));
     const flowWidths = textContainsCjk(flowText)
-      ? resolveSharedFlowWidths(boxes, { maxScale: 1.65 })
+      ? resolveSharedFlowWidths(boxes)
       : boxes.map((box) => box.width);
     const assignments = distributeTextAcrossBoxes(flowText, boxes, {
       resolveWidth(_box, index) {

@@ -66,6 +66,10 @@ describe("text cover helpers", () => {
     expect(resolveCoverOpacity(0.99)).toBe(0.99);
   });
 
+  test("makes OCR replacement covers fully opaque so source glyphs cannot bleed through", () => {
+    expect(resolveCoverOpacity(0.82, { requireOpaque: true })).toBe(1);
+  });
+
   test("classifies flat screenshot-like regions as ui mode", () => {
     const imageData = createImageData(8, 8, [240, 236, 232], [18, 18, 18]);
     const analysis = analyzeRegionTextureFromImageData(imageData, 8, 8, {

@@ -18,6 +18,7 @@
 		7D8B27BA301CB1AF00CFCED6 /* Translect Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7D8B27B9301CB1AF00CFCED6 /* Translect Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7D8B27BF301CB1AF00CFCED6 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D8B27BE301CB1AF00CFCED6 /* SafariWebExtensionHandler.swift */; };
 		7D8B27D5301CB1AF00CFCED6 /* VisionOCR.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D8B27D6301CB1AF00CFCED6 /* VisionOCR.swift */; };
+		7D8B27D8301CB1AF00CFCED6 /* AppleIntelligenceTranslation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D8B27D9301CB1AF00CFCED6 /* AppleIntelligenceTranslation.swift */; };
 		7D8B27D0301CB1AF00CFCED6 /* popup in Resources */ = {isa = PBXBuildFile; fileRef = 7D8B27CB301CB1AF00CFCED6 /* popup */; };
 		7D8B27D1301CB1AF00CFCED6 /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 7D8B27CC301CB1AF00CFCED6 /* background.js */; };
 		7D8B27D2301CB1AF00CFCED6 /* icons in Resources */ = {isa = PBXBuildFile; fileRef = 7D8B27CD301CB1AF00CFCED6 /* icons */; };
@@ -63,6 +64,7 @@
 		7D8B27B9301CB1AF00CFCED6 /* Translect Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Translect Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7D8B27BE301CB1AF00CFCED6 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
 		7D8B27D6301CB1AF00CFCED6 /* VisionOCR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VisionOCR.swift; path = ../../../native/macos-vision-ocr/Sources/TranslectMacOSVisionOCR/VisionOCR.swift; sourceTree = SOURCE_ROOT; };
+		7D8B27D9301CB1AF00CFCED6 /* AppleIntelligenceTranslation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppleIntelligenceTranslation.swift; path = ../../../native/macos-vision-ocr/Sources/TranslectMacOSVisionOCR/AppleIntelligenceTranslation.swift; sourceTree = SOURCE_ROOT; };
 		7D8B27C0301CB1AF00CFCED6 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		7D8B27CB301CB1AF00CFCED6 /* popup */ = {isa = PBXFileReference; lastKnownFileType = folder; name = popup; path = Resources/popup; sourceTree = "<group>"; };
 		7D8B27CC301CB1AF00CFCED6 /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = background.js; path = Resources/background.js; sourceTree = "<group>"; };
@@ -137,6 +139,7 @@
 				7D8B27CA301CB1AF00CFCED6 /* Resources */,
 				7D8B27BE301CB1AF00CFCED6 /* SafariWebExtensionHandler.swift */,
 				7D8B27D6301CB1AF00CFCED6 /* VisionOCR.swift */,
+				7D8B27D9301CB1AF00CFCED6 /* AppleIntelligenceTranslation.swift */,
 				7D8B27C0301CB1AF00CFCED6 /* Info.plist */,
 			);
 			path = "Translect Extension";
@@ -299,6 +302,7 @@
 			files = (
 				7D8B27BF301CB1AF00CFCED6 /* SafariWebExtensionHandler.swift in Sources */,
 				7D8B27D5301CB1AF00CFCED6 /* VisionOCR.swift in Sources */,
+				7D8B27D8301CB1AF00CFCED6 /* AppleIntelligenceTranslation.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

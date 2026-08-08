@@ -72,6 +72,10 @@ body {
   margin-top: 12px;
 }
 
+#remoteApiSettings {
+  margin-top: 12px;
+}
+
 [hidden] {
   display: none !important;
 }

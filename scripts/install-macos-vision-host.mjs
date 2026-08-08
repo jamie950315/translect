@@ -49,7 +49,7 @@ const executablePath = path.join(
 const manifestPath = path.join(manifestDir, `${hostName}.json`);
 const manifest = {
   name: hostName,
-  description: "Translect macOS Vision OCR native host",
+  description: "Translect macOS Vision OCR and Apple Intelligence native host",
   path: executablePath,
   type: "stdio",
   allowed_origins: [`chrome-extension://${extensionId}/`]

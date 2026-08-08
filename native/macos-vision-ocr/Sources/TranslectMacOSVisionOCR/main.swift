@@ -29,9 +29,14 @@ func writeNativeMessage<T: Encodable>(_ message: T) throws {
 }
 
 while let messageData = readNativeMessage() {
-    let response = handleVisionOCRMessage(messageData)
     do {
-        try writeNativeMessage(response)
+        if isAppleIntelligenceTranslationRequest(messageData) {
+            try await writeNativeMessage(
+                handleAppleIntelligenceMessage(messageData)
+            )
+        } else {
+            try writeNativeMessage(handleVisionOCRMessage(messageData))
+        }
     } catch {
         FileHandle.standardError.write(Data("Failed to write response: \(error)\n".utf8))
         exit(1)

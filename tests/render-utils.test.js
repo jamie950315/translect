@@ -54,6 +54,45 @@ describe("render utils", () => {
     expect(result.lines.length).toBeGreaterThan(0);
   });
 
+  test("shrinks below the preferred minimum when a Vision line box is shorter", () => {
+    const result = fitFontSize("推出", { width: 78, height: 13.95 }, {
+      lineHeightRatio: 1.18,
+      maxFontSize: 18,
+      measureWidth,
+      minFontSize: 16
+    });
+
+    expect(result.fontSize).toBeLessThan(16);
+    expect(result.lines.length * result.lineHeight).toBeLessThanOrEqual(13.95);
+  });
+
+  test("keeps translated text inside a short macOS Vision frame", () => {
+    const [layout] = planTextLayouts(
+      [
+        {
+          bounds: { x: 60, y: 40, width: 112, height: 13.95 },
+          provider: "macos-vision",
+          sourceLineCount: 1,
+          style: {
+            align: "left",
+            container: "image-text",
+            fontWeight: 540,
+            rotation: 0
+          },
+          translatedText: "顯示翻譯"
+        }
+      ],
+      {
+        maxFontSize: 18,
+        measureWidth,
+        minFontSize: 16
+      }
+    );
+
+    expect(layout.lines).toHaveLength(1);
+    expect(layout.lines.length * layout.lineHeight).toBeLessThanOrEqual(13.95);
+  });
+
   test("keeps stacked blocks in the same chat response at a consistent font size", () => {
     const layouts = planTextLayouts(
       [

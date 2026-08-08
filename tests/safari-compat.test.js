@@ -5,16 +5,64 @@ import { spawnSync } from "node:child_process";
 
 import { describe, expect, test } from "vitest";
 
-import { installWebExtensionApiCompatibility } from "../src/shared/browser-compat.js";
+import * as browserCompat from "../src/shared/browser-compat.js";
 import { getExtensionCommands } from "../src/shared/command-support.js";
 import { createSafariManifest } from "../src/shared/safari-manifest.js";
 
 describe("Safari Web Extension compatibility", () => {
+  test("sends only the message payload through Safari native messaging", async () => {
+    const calls = [];
+    const message = { operation: "apple-intelligence-translate" };
+    const safariApi = {
+      runtime: {
+        async sendNativeMessage(...args) {
+          calls.push(args);
+          return { ok: true };
+        }
+      }
+    };
+    const globalObject = { browser: safariApi };
+
+    expect(browserCompat.sendNativeMessageToNativeApp).toBeTypeOf("function");
+    await expect(
+      browserCompat.sendNativeMessageToNativeApp(
+        "com.translect.ocr",
+        message,
+        globalObject
+      )
+    ).resolves.toEqual({ ok: true });
+    expect(calls).toEqual([[message]]);
+  });
+
+  test("keeps the native host name when Chromium sends a native message", async () => {
+    const calls = [];
+    const message = { operation: "apple-intelligence-translate" };
+    const chromeApi = {
+      runtime: {
+        async sendNativeMessage(...args) {
+          calls.push(args);
+          return { ok: true };
+        }
+      }
+    };
+    const globalObject = { chrome: chromeApi };
+
+    expect(browserCompat.sendNativeMessageToNativeApp).toBeTypeOf("function");
+    await expect(
+      browserCompat.sendNativeMessageToNativeApp(
+        "com.translect.ocr",
+        message,
+        globalObject
+      )
+    ).resolves.toEqual({ ok: true });
+    expect(calls).toEqual([["com.translect.ocr", message]]);
+  });
+
   test("aliases Safari's browser API to chrome for shared extension modules", () => {
     const safariApi = { runtime: {} };
     const globalObject = { browser: safariApi };
 
-    expect(installWebExtensionApiCompatibility(globalObject)).toBe(safariApi);
+    expect(browserCompat.installWebExtensionApiCompatibility(globalObject)).toBe(safariApi);
     expect(globalObject.chrome).toBe(safariApi);
   });
 
@@ -23,7 +71,7 @@ describe("Safari Web Extension compatibility", () => {
     const safariApi = { runtime: { id: "safari" } };
     const globalObject = { browser: safariApi, chrome: chromeApi };
 
-    expect(installWebExtensionApiCompatibility(globalObject)).toBe(chromeApi);
+    expect(browserCompat.installWebExtensionApiCompatibility(globalObject)).toBe(chromeApi);
     expect(globalObject.chrome).toBe(chromeApi);
   });
 
@@ -151,9 +199,12 @@ describe("Safari Web Extension compatibility", () => {
     ]);
 
     expect(project).toContain("VisionOCR.swift in Sources");
+    expect(project).toContain("AppleIntelligenceTranslation.swift in Sources");
     expect(project).toContain("build-safari.mjs");
     expect(project).toContain("alwaysOutOfDate = 1;");
     expect(handler).toContain("handleVisionOCRMessage");
+    expect(handler).toContain("apple-intelligence-translate");
+    expect(handler).toContain("handleAppleIntelligenceMessage");
   });
 
   test("derives the Safari extension identifier from the containing app", async () => {

@@ -1,3 +1,5 @@
+import { buildChatCompletionSamplingOptions } from "./api.js";
+
 function clampNumber(value, min, max, fallback) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
@@ -28,7 +30,7 @@ function shouldJoinLine(group, line) {
 
   return (
     verticalGap >= -averageHeight * 0.35 &&
-    verticalGap <= Math.max(16, averageHeight * 1.15) &&
+    verticalGap <= Math.max(4, averageHeight * 0.75) &&
     similarHeight &&
     (overlap >= 0.25 || leftDelta <= Math.max(54, averageHeight * 2.4))
   );
@@ -138,6 +140,70 @@ export function normalizeMacosVisionOcrResult(imageId, responseJson) {
   };
 }
 
+export function normalizeAppleIntelligenceResult(imageId, responseJson) {
+  const imageWidth = clampNumber(
+    responseJson?.image_width ?? responseJson?.imageWidth,
+    1,
+    100000,
+    1
+  );
+  const imageHeight = clampNumber(
+    responseJson?.image_height ?? responseJson?.imageHeight,
+    1,
+    100000,
+    1
+  );
+  const observations = Array.isArray(responseJson?.observations)
+    ? responseJson.observations
+    : [];
+
+  const blocks = observations
+    .map((observation, index) => {
+      const sourceText = normalizeText(observation?.text || observation?.rawValue);
+      const flowText = normalizeText(
+        observation?.translated_text ?? observation?.translatedText
+      );
+      const flowGroupId = normalizeText(
+        observation?.flow_group_id ?? observation?.flowGroupId
+      );
+      const semanticLabel = normalizeText(
+        observation?.semantic_label ?? observation?.semanticLabel
+      );
+      const box = boxFromObservation(observation, imageWidth, imageHeight);
+
+      return {
+        bounds: normalizePixelBounds(box, imageWidth, imageHeight),
+        flowBoxIndex: clampNumber(
+          observation?.flow_box_index ?? observation?.flowBoxIndex,
+          0,
+          observations.length,
+          index
+        ),
+        flowGroupId: flowGroupId || `${imageId}:flow:${index}`,
+        flowText,
+        groupId: flowGroupId || `${imageId}:flow:${index}`,
+        provider: "macos-vision",
+        semanticLabel,
+        sourceLineCount: 1,
+        sourceText,
+        style: defaultStyle(),
+        translatedText: ""
+      };
+    })
+    .filter(
+      (block) =>
+        block.sourceText &&
+        block.flowText &&
+        block.bounds.width > 0 &&
+        block.bounds.height > 0
+    );
+
+  return {
+    imageId,
+    translation: { blocks }
+  };
+}
+
 export function buildMacosVisionTextTranslationPayload({ model, ocrImages, targetLanguage }) {
   const compactImages = ocrImages.map((image) => {
     const groupsById = new Map();
@@ -162,7 +228,7 @@ export function buildMacosVisionTextTranslationPayload({ model, ocrImages, targe
 
   return {
     model,
-    temperature: 0.1,
+    ...buildChatCompletionSamplingOptions(model),
     response_format: {
       type: "json_object"
     },

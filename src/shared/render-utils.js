@@ -77,11 +77,7 @@ export function fitFontSize(text, box, options) {
     targetLineCount = 0
   } = options;
 
-  let best = {
-    fontSize: minFontSize,
-    lineDelta: Number.POSITIVE_INFINITY,
-    lines: wrapTextToWidth(text, box.width, (value) => measureWidth(value, minFontSize))
-  };
+  let best = null;
 
   for (let fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 1) {
     const lines = wrapTextToWidth(text, box.width, (value) => measureWidth(value, fontSize));
@@ -97,6 +93,7 @@ export function fitFontSize(text, box, options) {
       : 0;
 
     if (
+      !best ||
       lineDelta < best.lineDelta ||
       (lineDelta === best.lineDelta && fontSize > best.fontSize)
     ) {
@@ -106,6 +103,26 @@ export function fitFontSize(text, box, options) {
         lines
       };
     }
+  }
+
+  if (!best && box.height < minFontSize * lineHeightRatio) {
+    for (let fontSize = minFontSize - 1; fontSize >= 1; fontSize -= 1) {
+      const lines = wrapTextToWidth(text, box.width, (value) => measureWidth(value, fontSize));
+      const requiredHeight = lines.length * fontSize * lineHeightRatio;
+      const widestLine = Math.max(...lines.map((line) => measureWidth(line, fontSize)), 0);
+
+      if (widestLine <= box.width && requiredHeight <= box.height) {
+        best = { fontSize, lines };
+        break;
+      }
+    }
+  }
+
+  if (!best) {
+    best = {
+      fontSize: minFontSize,
+      lines: wrapTextToWidth(text, box.width, (value) => measureWidth(value, minFontSize))
+    };
   }
 
   return {
@@ -187,7 +204,7 @@ function getTextPadding(rect, block) {
   if (block?.provider === "macos-vision") {
     return {
       x: Math.max(2, rect.width * 0.02),
-      y: Math.max(4, rect.height * 0.04)
+      y: Math.max(0.5, rect.height * 0.03)
     };
   }
 
@@ -220,10 +237,16 @@ function getTextBox(rect, block) {
   const padding = getTextPadding(rect, block);
 
   return {
-    height: Math.max(18, rect.height - padding.y * 2),
+    height:
+      block?.provider === "macos-vision"
+        ? Math.max(1, rect.height - padding.y * 2)
+        : Math.max(18, rect.height - padding.y * 2),
     paddingX: padding.x,
     paddingY: padding.y,
-    width: Math.max(18, rect.width - padding.x * 2)
+    width:
+      block?.provider === "macos-vision"
+        ? Math.max(1, rect.width - padding.x * 2)
+        : Math.max(18, rect.width - padding.x * 2)
   };
 }
 

@@ -37,7 +37,8 @@ export function normalizeIosOcrEndpoint(value) {
 }
 
 export function normalizeSettings(rawSettings = {}) {
-  const useMacosVisionOcr = Boolean(rawSettings.useMacosVisionOcr);
+  const useAppleIntelligence = Boolean(rawSettings.useAppleIntelligence);
+  const useMacosVisionOcr = !useAppleIntelligence && Boolean(rawSettings.useMacosVisionOcr);
   return {
     apiEndpoint: normalizeApiEndpoint(rawSettings.apiEndpoint || DEFAULT_SETTINGS.apiEndpoint),
     apiKey: cleanString(rawSettings.apiKey),
@@ -53,7 +54,9 @@ export function normalizeSettings(rawSettings = {}) {
       DEFAULT_SETTINGS.targetLanguage,
     alwaysAutoDetect: Boolean(rawSettings.alwaysAutoDetect),
     triggerUsesAutoMode: Boolean(rawSettings.triggerUsesAutoMode),
-    useIosOcrServer: !useMacosVisionOcr && Boolean(rawSettings.useIosOcrServer),
+    useAppleIntelligence,
+    useIosOcrServer:
+      !useAppleIntelligence && !useMacosVisionOcr && Boolean(rawSettings.useIosOcrServer),
     useMacosVisionOcr
   };
 }
@@ -69,12 +72,22 @@ export function denormalizeSettings(settings) {
 }
 
 export function settingsAreReady(settings) {
+  if (settings.useAppleIntelligence) {
+    return Boolean(settings.targetLanguage);
+  }
+
   return Boolean(
     settings.apiEndpoint && settings.apiKey && settings.model && settings.targetLanguage
   );
 }
 
 export function getSettingsValidationError(settings) {
+  if (!settings.targetLanguage) {
+    return "Target language is required.";
+  }
+  if (settings.useAppleIntelligence) {
+    return "";
+  }
   if (!settings.apiEndpoint) {
     return "API endpoint is required.";
   }
@@ -83,9 +96,6 @@ export function getSettingsValidationError(settings) {
   }
   if (!settings.model) {
     return "Model ID is required.";
-  }
-  if (!settings.targetLanguage) {
-    return "Target language is required.";
   }
   if (settings.useIosOcrServer && !settings.iosOcrEndpoint) {
     return "iOS OCR Server endpoint is required.";

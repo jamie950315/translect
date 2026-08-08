@@ -1,4 +1,7 @@
-import { installWebExtensionApiCompatibility } from "../shared/browser-compat.js";
+import {
+  installWebExtensionApiCompatibility,
+  sendNativeMessageToNativeApp
+} from "../shared/browser-compat.js";
 import {
   COMMANDS,
   DEFAULT_SETTINGS,
@@ -20,13 +23,18 @@ import {
 import {
   buildMacosVisionTextTranslationPayload,
   mergeMacosVisionTranslationResults,
+  normalizeAppleIntelligenceResult,
   normalizeMacosVisionOcrResult
 } from "../shared/macos-vision-ocr.js";
 import {
   getSettingsValidationError,
   normalizeSettings
 } from "../shared/settings.js";
+import {
+  requestAppleIntelligenceWithTextFallback
+} from "./apple-intelligence-text-fallback.js";
 import { createCaptureVisibleTabLimiter } from "./capture-rate-limit.js";
+import { dispatchPageAction } from "./page-action-dispatch.js";
 
 installWebExtensionApiCompatibility();
 
@@ -96,20 +104,12 @@ async function injectCurrentContentScript(tab) {
 
 async function dispatchToActiveTab(action) {
   const tab = await getActiveTab();
-  await injectCurrentContentScript(tab);
-
-  try {
-    return await chrome.tabs.sendMessage(tab.id, {
-      type: MESSAGE_TYPES.PAGE_ACTION,
-      action
-    });
-  } catch (error) {
-    console.warn("Current Translect content script did not answer; trying legacy channel.", error);
-    return chrome.tabs.sendMessage(tab.id, {
-      type: "page-action",
-      action
-    });
-  }
+  return dispatchPageAction({
+    action,
+    injectContentScript: () => injectCurrentContentScript(tab),
+    sendMessage: chrome.tabs.sendMessage.bind(chrome.tabs),
+    tabId: tab.id
+  });
 }
 
 function buildRequestHeaders(apiKey) {
@@ -252,12 +252,8 @@ async function requestIosOcrTranslations(settings, requests) {
 }
 
 async function sendNativeMessage(hostName, message) {
-  if (!chrome.runtime.sendNativeMessage) {
-    throw new Error("Native messaging is not available in this browser.");
-  }
-
   try {
-    return await chrome.runtime.sendNativeMessage(hostName, message);
+    return await sendNativeMessageToNativeApp(hostName, message);
   } catch (error) {
     const messageText = error instanceof Error ? error.message : String(error);
     if (/native messaging host not found/i.test(messageText)) {
@@ -317,7 +313,53 @@ async function requestMacosVisionOcrTranslations(settings, requests) {
   }));
 }
 
+async function requestAppleIntelligenceTranslation(settings, request) {
+  const responseJson = await sendNativeMessage(settings.macosVisionHostName, {
+    id: request.id,
+    imageDataUrl: request.imageDataUrl,
+    operation: "apple-intelligence-translate",
+    targetLanguage: settings.targetLanguage
+  });
+
+  if (!responseJson?.ok) {
+    throw new Error(
+      responseJson?.error ||
+        "Apple Intelligence could not identify and translate the image text."
+    );
+  }
+
+  return {
+    id: request.id,
+    translation: normalizeAppleIntelligenceResult(request.id, responseJson).translation
+  };
+}
+
+function requestAppleIntelligenceTranslations(settings, requests) {
+  return Promise.all(
+    requests.map((request) =>
+      requestAppleIntelligenceWithTextFallback({
+        request,
+        requestAppleIntelligence: (appleRequest) =>
+          requestAppleIntelligenceTranslation(settings, appleRequest),
+        requestTextFallback: (fallbackRequests) =>
+          requestMacosVisionOcrTranslations(settings, fallbackRequests),
+        settings
+      })
+    )
+  );
+}
+
 async function requestTranslation(settings, imageDataUrl) {
+  if (settings.useAppleIntelligence) {
+    const [result] = await requestAppleIntelligenceTranslations(settings, [
+      {
+        id: "image-0",
+        imageDataUrl
+      }
+    ]);
+    return result.translation;
+  }
+
   if (settings.useMacosVisionOcr) {
     const [result] = await requestMacosVisionOcrTranslations(settings, [
       {
@@ -354,6 +396,10 @@ async function requestTranslation(settings, imageDataUrl) {
 }
 
 async function requestTranslations(settings, requests) {
+  if (settings.useAppleIntelligence) {
+    return requestAppleIntelligenceTranslations(settings, requests);
+  }
+
   if (settings.useMacosVisionOcr) {
     return requestMacosVisionOcrTranslations(settings, requests);
   }

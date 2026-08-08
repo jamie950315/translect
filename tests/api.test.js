@@ -23,6 +23,26 @@ describe("api helpers", () => {
     expect(payload.messages[0].content).toContain("source_line_count");
   });
 
+  test("omits custom temperature for GPT-5.6 Terra image translations", () => {
+    const payload = buildChatCompletionsPayload({
+      imageDataUrl: "data:image/png;base64,abc",
+      model: "gpt-5.6-terra",
+      targetLanguage: "Traditional Chinese"
+    });
+
+    expect(payload).not.toHaveProperty("temperature");
+  });
+
+  test("keeps low temperature for models that support custom sampling", () => {
+    const payload = buildChatCompletionsPayload({
+      imageDataUrl: "data:image/png;base64,abc",
+      model: "gpt-4.1-mini",
+      targetLanguage: "Traditional Chinese"
+    });
+
+    expect(payload.temperature).toBe(0.1);
+  });
+
   test("extracts string content from a chat completion response", () => {
     expect(
       extractAssistantText({

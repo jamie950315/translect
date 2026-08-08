@@ -15,12 +15,16 @@ function appendToken(text, token) {
   return shouldInsertSpace(text, token) ? `${text} ${token}` : `${text}${token}`;
 }
 
-export function resolveSharedFlowWidths(boxes, options = {}) {
-  const maxScale = Number.isFinite(Number(options.maxScale)) ? Number(options.maxScale) : 1.65;
-  const widths = boxes.map((box) => Math.max(1, Number(box?.width) || 0));
-  const widest = Math.max(...widths, 1);
+export function resolveSharedFlowWidths(boxes) {
+  return boxes.map((box) => Math.max(1, Number(box?.width) || 0));
+}
 
-  return widths.map((width) => Math.min(widest, width * maxScale));
+export function resolveMacosVisionFlowTextBox(rect) {
+  const width = Math.max(0, Number(rect?.width) || 0);
+  const paddingX = Math.max(2, width * 0.02);
+  return {
+    width: Math.max(1, width - paddingX * 2)
+  };
 }
 
 export function distributeTextAcrossLineBlocks(blocks, options = {}) {

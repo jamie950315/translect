@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS = {
   targetLanguage: "Traditional Chinese",
   alwaysAutoDetect: false,
   triggerUsesAutoMode: false,
+  useAppleIntelligence: false,
   useIosOcrServer: false,
   useMacosVisionOcr: false
 };

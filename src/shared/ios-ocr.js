@@ -1,3 +1,5 @@
+import { buildChatCompletionSamplingOptions } from "./api.js";
+
 function clampNumber(value, min, max, fallback) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
@@ -211,7 +213,7 @@ export function buildTextTranslationPayload({ model, ocrImages, targetLanguage }
 
   return {
     model,
-    temperature: 0.1,
+    ...buildChatCompletionSamplingOptions(model),
     response_format: {
       type: "json_object"
     },

@@ -1,6 +1,6 @@
 # Translect
 
-Translect is a WebExtension for Chromium and macOS Safari that translates text inside webpage images with an OpenAI-compatible vision endpoint, then redraws the translated text directly over the original image.
+Translect is a WebExtension for Chromium and macOS Safari that translates text inside webpage images, then redraws the translated text directly over the original image. It supports both OpenAI-compatible endpoints and fully local Apple Intelligence translation on supported Macs.
 
 ## Features
 
@@ -13,6 +13,7 @@ Translect is a WebExtension for Chromium and macOS Safari that translates text i
 - Configurable target language, API key, API endpoint URL, and model ID
 - Optional iOS OCR Server mode for OCR and text-box positioning
 - Optional macOS Vision OCR mode through a local native messaging host
+- Optional on-device Apple Intelligence mode for OCR grouping, semantic labeling, and translation
 - Native macOS Safari app and Safari Web Extension project
 - Batched text-only translation when an OCR provider mode is enabled
 - Default model: `gpt-5.4-mini`
@@ -20,7 +21,8 @@ Translect is a WebExtension for Chromium and macOS Safari that translates text i
 ## Requirements
 
 - A Chromium-based browser that supports Manifest V3 extensions, or macOS 13+ with Safari 17+.
-- An OpenAI-compatible `/chat/completions` endpoint and API key.
+- An OpenAI-compatible `/chat/completions` endpoint and API key, unless using Apple Intelligence mode.
+- A Mac that supports Apple Intelligence with macOS 26+ and Apple Intelligence enabled when using local Apple Intelligence mode.
 - Node.js for development, builds, and Playwright scenario tests.
 - Swift toolchain on macOS when using the macOS Vision OCR native host.
 - Xcode on macOS when building the Safari app.
@@ -67,6 +69,20 @@ macOS Vision OCR boxes are treated as the source of truth for text placement. Th
 
 OCR provider modes are mutually exclusive. Enabling macOS Vision OCR disables iOS OCR Server mode.
 
+### Apple Intelligence Mode
+
+Apple Intelligence mode keeps the entire image translation flow on the Mac. It does not use the configured API endpoint, API key, or external model.
+
+Safari uses the native code bundled in the Translect app. Chromium can use the same local flow after installing the macOS native host.
+
+1. Apple Vision recognizes source text and returns exact on-device text-box coordinates.
+2. Nearby Vision lines are grouped without changing their original boxes.
+3. Apple's on-device Foundation Model assigns a semantic label such as heading, body, caption, button, navigation, metadata, or code.
+4. The Foundation Model translates each group into the configured target language.
+5. Translect merges the label and translation back onto the original Vision boxes and renders inside those boxes.
+
+This mode requires macOS 26 or later, an Apple Intelligence-capable Mac, Apple Intelligence enabled in System Settings, and a downloaded on-device model. The popup reports whether the device is ineligible, Apple Intelligence is disabled, or the model is not ready. Existing remote modes remain available on older systems.
+
 ## Settings
 
 The popup stores settings in Chromium extension storage:
@@ -76,6 +92,7 @@ The popup stores settings in Chromium extension storage:
 - Model ID
 - Target language
 - Auto-detect behavior
+- Apple Intelligence local mode toggle
 - iOS OCR Server toggle
 - iOS OCR Server endpoint
 - macOS Vision OCR toggle
@@ -142,7 +159,7 @@ The installer builds the native host in release mode and writes a Native Messagi
 
 If Chrome reports that the native messaging host is missing, reinstall with the extension ID shown in the currently loaded unpacked extension. Extension IDs change when the extension is loaded from a different path.
 
-Safari does not need this installer. Its Xcode project includes the Apple Vision OCR bridge, and Safari routes native messages to the containing Translect app automatically.
+Safari does not need this installer. Its Xcode project includes the Apple Vision OCR and Apple Intelligence bridges, and Safari routes native messages to the containing Translect app automatically. The installed Chromium native host supports both macOS Vision OCR and Apple Intelligence requests.
 
 ## Load In Chromium
 
@@ -171,7 +188,7 @@ The always-on auto-detect toggle also has a default shortcut:
 - Auto-detect mode translates visible images on the page.
 - Manual selection mode can translate any visible screen region, including text embedded in complex layouts.
 - The extension currently targets standard webpage images and visible page regions, not browser-internal pages such as `chrome://`.
-- The extension requires an OpenAI-compatible endpoint and API key for real translations.
+- Remote translation modes require an OpenAI-compatible endpoint and API key. Apple Intelligence mode does not.
 - macOS Vision OCR requires the native host to be installed for the active extension ID in Chromium. Safari includes the OCR bridge in the Translect app.
 - macOS Vision OCR uses Apple Vision only for OCR and text-box coordinates. Translation still goes through the configured OpenAI-compatible endpoint.
 - iOS OCR Server mode uses the iOS server only for OCR and text-box coordinates. Translation still goes through the configured OpenAI-compatible endpoint.

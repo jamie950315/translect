@@ -20,27 +20,37 @@
           <input id="targetLanguage" type="text" placeholder="Traditional Chinese">
         </label>
 
-        <label class="field">
-          <span>API endpoint URL</span>
-          <input id="apiEndpoint" type="url" placeholder="https://api.openai.com/v1">
-          <small>Base URL is fine. The extension will call <code>/chat/completions</code>.</small>
-        </label>
+        <div id="remoteApiSettings" class="provider-settings">
+          <label class="field">
+            <span>API endpoint URL</span>
+            <input id="apiEndpoint" type="url" placeholder="https://api.openai.com/v1">
+            <small>Base URL is fine. The extension will call <code>/chat/completions</code>.</small>
+          </label>
 
-        <label class="field">
-          <span>API key</span>
-          <span class="inline-input">
-            <input id="apiKey" type="password" placeholder="sk-...">
-            <button id="pasteApiKeyButton" class="compact" type="button">Paste</button>
-          </span>
-        </label>
+          <label class="field">
+            <span>API key</span>
+            <span class="inline-input">
+              <input id="apiKey" type="password" placeholder="sk-...">
+              <button id="pasteApiKeyButton" class="compact" type="button">Paste</button>
+            </span>
+          </label>
 
-        <label class="field">
-          <span>Model ID</span>
-          <input id="model" type="text" placeholder="gpt-5.4-mini">
-        </label>
+          <label class="field">
+            <span>Model ID</span>
+            <input id="model" type="text" placeholder="gpt-5.4-mini">
+          </label>
+        </div>
       </section>
 
       <section class="card toggles">
+        <label class="switch">
+          <input id="useAppleIntelligence" type="checkbox">
+          <span>
+            <strong>Use Apple Intelligence (local)</strong>
+            <small>Identify, group, label, and translate image text on this Mac. Requires macOS 26 or later and Apple Intelligence.</small>
+          </span>
+        </label>
+
         <label class="switch">
           <input id="useMacosVisionOcr" type="checkbox">
           <span>

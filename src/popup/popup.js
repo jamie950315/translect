@@ -22,11 +22,13 @@ const elements = {
   manualButton: document.getElementById("manualButton"),
   model: document.getElementById("model"),
   pasteApiKeyButton: document.getElementById("pasteApiKeyButton"),
+  remoteApiSettings: document.getElementById("remoteApiSettings"),
   saveButton: document.getElementById("saveButton"),
   shortcutText: document.getElementById("shortcutText"),
   status: document.getElementById("status"),
   targetLanguage: document.getElementById("targetLanguage"),
   triggerUsesAutoMode: document.getElementById("triggerUsesAutoMode"),
+  useAppleIntelligence: document.getElementById("useAppleIntelligence"),
   useIosOcrServer: document.getElementById("useIosOcrServer"),
   useMacosVisionOcr: document.getElementById("useMacosVisionOcr")
 };
@@ -46,6 +48,7 @@ function readFormSettings() {
     model: elements.model.value,
     targetLanguage: elements.targetLanguage.value,
     triggerUsesAutoMode: elements.triggerUsesAutoMode.checked,
+    useAppleIntelligence: elements.useAppleIntelligence.checked,
     useIosOcrServer: elements.useIosOcrServer.checked,
     useMacosVisionOcr: elements.useMacosVisionOcr.checked
   });
@@ -61,21 +64,29 @@ function fillForm(settings) {
   elements.model.value = values.model;
   elements.targetLanguage.value = values.targetLanguage;
   elements.triggerUsesAutoMode.checked = values.triggerUsesAutoMode;
+  elements.useAppleIntelligence.checked = values.useAppleIntelligence;
   elements.useIosOcrServer.checked = values.useIosOcrServer;
   elements.useMacosVisionOcr.checked = values.useMacosVisionOcr;
   updateProviderSettingsVisibility();
 }
 
 function updateProviderSettingsVisibility() {
+  elements.remoteApiSettings.hidden = elements.useAppleIntelligence.checked;
   elements.macosVisionSettings.hidden = !elements.useMacosVisionOcr.checked;
   elements.iosOcrSettings.hidden = !elements.useIosOcrServer.checked;
 }
 
 function selectOcrProvider(provider) {
+  if (provider === "apple" && elements.useAppleIntelligence.checked) {
+    elements.useMacosVisionOcr.checked = false;
+    elements.useIosOcrServer.checked = false;
+  }
   if (provider === "macos" && elements.useMacosVisionOcr.checked) {
+    elements.useAppleIntelligence.checked = false;
     elements.useIosOcrServer.checked = false;
   }
   if (provider === "ios" && elements.useIosOcrServer.checked) {
+    elements.useAppleIntelligence.checked = false;
     elements.useMacosVisionOcr.checked = false;
   }
   updateProviderSettingsVisibility();
@@ -165,6 +176,10 @@ elements.pasteApiKeyButton.addEventListener("click", async () => {
 
 elements.useMacosVisionOcr.addEventListener("change", () => {
   selectOcrProvider("macos");
+});
+
+elements.useAppleIntelligence.addEventListener("change", () => {
+  selectOcrProvider("apple");
 });
 
 elements.useIosOcrServer.addEventListener("change", () => {

@@ -1,4 +1,4 @@
-const STORAGE_KEY = "__translect_reddit_translation_cache_v1";
+const STORAGE_KEY = "__translect_reddit_translation_cache_v2";
 const MAX_ENTRIES = 36;
 const MAX_ASPECT_RATIO_DELTA = 0.08;
 
@@ -11,7 +11,9 @@ function normalizeUrl(value) {
 }
 
 function normalizeSettingsKey(settings = {}) {
-  const provider = settings.useMacosVisionOcr
+  const provider = settings.useAppleIntelligence
+    ? "apple-intelligence:local"
+    : settings.useMacosVisionOcr
     ? `macos-vision:${String(settings.macosVisionHostName || "").trim().toLowerCase()}`
     : settings.useIosOcrServer
     ? `ios-ocr:${String(settings.iosOcrEndpoint || "").trim().toLowerCase()}`

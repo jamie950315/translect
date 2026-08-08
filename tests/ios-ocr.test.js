@@ -69,6 +69,16 @@ describe("iOS OCR helpers", () => {
     expect(payload.messages[1].content).toContain("\"text\":\"World\"");
   });
 
+  test("omits custom temperature for GPT-5.6 Terra OCR text translations", () => {
+    const payload = buildTextTranslationPayload({
+      model: "gpt-5.6-terra",
+      ocrImages: [],
+      targetLanguage: "Traditional Chinese"
+    });
+
+    expect(payload).not.toHaveProperty("temperature");
+  });
+
   test("merges translated text onto OCR-owned boxes", () => {
     const merged = mergeOcrAndTranslationResults(
       [normalizeIosOcrResult("image-a", ocrJson)],

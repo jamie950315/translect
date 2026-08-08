@@ -4,8 +4,13 @@ import {
   distributeTextAcrossBoxes,
   distributeTextAcrossLineBlocks
 } from "../src/shared/flow-text.js";
+import * as flowText from "../src/shared/flow-text.js";
 
 describe("flow text distribution", () => {
+  test("keeps the packing width inside a very narrow macOS Vision frame", () => {
+    expect(flowText.resolveMacosVisionFlowTextBox?.({ width: 12 })).toEqual({ width: 8 });
+  });
+
   test("does not let a narrow OCR box consume text meant for later boxes", () => {
     const assignments = distributeTextAcrossBoxes(
       "Yo Chris bought an iPhone",

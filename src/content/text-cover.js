@@ -437,7 +437,11 @@ export function resolveRenderedContainerKind(modelContainerKind, detectedContain
   return detectedContainerKind;
 }
 
-export function resolveCoverOpacity(backgroundOpacity) {
+export function resolveCoverOpacity(backgroundOpacity, options = {}) {
+  if (options.requireOpaque) {
+    return 1;
+  }
+
   const numericOpacity = Number(backgroundOpacity);
   const fallbackOpacity = Number.isFinite(numericOpacity) ? numericOpacity : 0.92;
   return clamp(Math.max(fallbackOpacity, 0.965), 0, 1);

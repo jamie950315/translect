@@ -8,6 +8,42 @@ import {
 } from "../src/content/reddit-media-cache.js";
 
 describe("reddit media translation cache", () => {
+  test("ignores translations saved by the previous rendering version", () => {
+    const legacyTranslation = { blocks: [{ translatedText: "P8181189" }] };
+    const storage = new Map([
+      [
+        "__translect_reddit_translation_cache_v1",
+        JSON.stringify([
+          {
+            imageMetrics: { aspectRatio: 2, height: 600, width: 1200 },
+            mediaKey: "media77",
+            postId: "1abcxyz",
+            settingsKey:
+              "traditional chinese|gpt-5.4-mini|apple-intelligence:local",
+            translation: legacyTranslation
+          }
+        ])
+      ]
+    ]);
+    const cache = makeRedditTranslationCache({
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => storage.set(key, value)
+    });
+
+    expect(
+      cache.find({
+        imageMetrics: { height: 600, width: 1200 },
+        imageUrl: "https://i.redd.it/media77.png",
+        pageUrl: "https://www.reddit.com/r/pics/comments/1abcxyz/title/",
+        settings: {
+          model: "gpt-5.4-mini",
+          targetLanguage: "Traditional Chinese",
+          useAppleIntelligence: true
+        }
+      })
+    ).toBe(null);
+  });
+
   test("uses the same media key for Reddit preview thumbnails and article images", () => {
     expect(
       extractRedditMediaKeyFromUrl(
