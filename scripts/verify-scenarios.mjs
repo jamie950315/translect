@@ -806,6 +806,17 @@ async function pageState(page) {
     return {
       labelCount: root ? root.querySelectorAll(".translect-label").length : 0,
       overlayCount: overlays.length,
+      overlayControls: overlays.map((node) => {
+        const canvas = node.querySelector("canvas");
+        const eyeButton = node.querySelector(".translect-overlay-eye");
+        const removeButton = node.querySelector(".translect-overlay-remove");
+        return {
+          canvasOpacity: canvas ? getComputedStyle(canvas).opacity : null,
+          eyePressed: eyeButton?.getAttribute("aria-pressed") || null,
+          hasEyeButton: Boolean(eyeButton),
+          hasRemoveButton: Boolean(removeButton)
+        };
+      }),
       overlayStyles: overlays.map((node) => {
         const style = getComputedStyle(node);
         const rect = node.getBoundingClientRect();
@@ -906,6 +917,13 @@ function takeMockImageRequests() {
 function assertOverlayStyle(state, expectedCount) {
   assert.equal(state.overlayCount, expectedCount);
   assert.equal(state.labelCount, 0);
+  assert.equal(state.overlayControls.length, expectedCount);
+  for (const controls of state.overlayControls) {
+    assert.equal(controls.hasEyeButton, true);
+    assert.equal(controls.hasRemoveButton, true);
+    assert.equal(controls.canvasOpacity, "1");
+    assert.equal(controls.eyePressed, "false");
+  }
   for (const overlay of state.overlayStyles) {
     assert.equal(overlay.background, "rgba(0, 0, 0, 0)");
     assert.equal(overlay.boxShadow, "none");
@@ -981,6 +999,40 @@ async function runSuite() {
       assertOverlayStyle(state, 2);
       await page.screenshot({ path: path.join(outputDir, "auto-after.png") });
       summary.push({ scenario: "auto_visible_images", state });
+      await page.close();
+    }
+
+    {
+      const page = await openPage(context, `${server.origin}/scenario-page.html`);
+      await dispatchToActiveTab(serviceWorker, "fire", PAGE_ACTIONS.AUTO_TRANSLATE_VISIBLE);
+      const initialState = await waitForOverlayCount(page, 2, "overlay-controls-initial");
+      assertOverlayStyle(initialState, 2);
+
+      const firstOverlay = page.locator(".translect-overlay").first();
+      const eyeButton = firstOverlay.locator(".translect-overlay-eye");
+      await eyeButton.click();
+      const dimmedState = await pageState(page);
+      assert.equal(dimmedState.overlayCount, 2);
+      assert.equal(dimmedState.overlayControls[0].canvasOpacity, "0.25");
+      assert.equal(dimmedState.overlayControls[0].eyePressed, "true");
+
+      await eyeButton.click();
+      const restoredState = await pageState(page);
+      assert.equal(restoredState.overlayControls[0].canvasOpacity, "1");
+      assert.equal(restoredState.overlayControls[0].eyePressed, "false");
+
+      await page.locator(".translect-overlay").nth(1).locator(".translect-overlay-remove").click();
+      await page.waitForTimeout(150);
+      const removedState = await pageState(page);
+      assert.equal(removedState.overlayCount, 1);
+      assert.equal(removedState.overlayControls.length, 1);
+      summary.push({
+        scenario: "overlay_controls_toggle_and_remove",
+        initialState,
+        dimmedState,
+        restoredState,
+        removedState
+      });
       await page.close();
     }
 

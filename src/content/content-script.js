@@ -108,6 +108,59 @@ function ensureStyles() {
       pointer-events: none;
     }
 
+    #${ROOT_ID} .translect-overlay-controls {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      z-index: 1;
+      display: flex;
+      gap: 5px;
+      pointer-events: auto;
+    }
+
+    #${ROOT_ID} .translect-overlay-control {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      place-items: center;
+      border: 1px solid rgba(255, 250, 243, 0.32);
+      border-radius: 9px;
+      background: rgba(22, 20, 18, 0.78);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+      color: #fffaf3;
+      cursor: pointer;
+      font: 600 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+      pointer-events: auto;
+    }
+
+    #${ROOT_ID} .translect-overlay-control:hover {
+      border-color: rgba(255, 250, 243, 0.68);
+      background: rgba(22, 20, 18, 0.94);
+      transform: translateY(-1px);
+    }
+
+    #${ROOT_ID} .translect-overlay-control:focus-visible {
+      outline: 2px solid rgba(255, 250, 243, 0.95);
+      outline-offset: 2px;
+    }
+
+    #${ROOT_ID} .translect-overlay-control[aria-pressed="true"] {
+      border-color: rgba(158, 218, 231, 0.82);
+      background: rgba(35, 92, 110, 0.92);
+    }
+
+    #${ROOT_ID} .translect-overlay-control svg {
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+    }
+
     #${ROOT_ID} .translect-toast-stack {
       position: fixed;
       top: 14px;
@@ -449,8 +502,15 @@ function currentOverlayEntriesForRect(rect) {
 }
 
 function removeOverlayEntry(entry) {
+  if (!entry || !state.overlayEntries.has(entry)) {
+    return;
+  }
+
   entry.node.remove();
   state.overlayEntries.delete(entry);
+  if (entry.anchorElement && state.overlayMap.get(entry.anchorElement) === entry) {
+    state.overlayMap.delete(entry.anchorElement);
+  }
 }
 
 function waitForNextPaint() {
@@ -466,6 +526,79 @@ function clearOverlays() {
     removeOverlayEntry(entry);
   }
   state.translatedVisualFingerprints.clear();
+}
+
+const EYE_ICON = `
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M2.5 12s3.4-5.2 9.5-5.2S21.5 12 21.5 12 18.1 17.2 12 17.2 2.5 12 2.5 12Z"></path>
+    <circle cx="12" cy="12" r="2.8"></circle>
+  </svg>
+`;
+
+const EYE_OFF_ICON = `
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="m3 3 18 18"></path>
+    <path d="M10.6 6.9c.45-.07.92-.1 1.4-.1 6.1 0 9.5 5.2 9.5 5.2a16.6 16.6 0 0 1-3.2 3.3M6.7 6.9C4 8.2 2.5 12 2.5 12s3.4 5.2 9.5 5.2c.9 0 1.75-.12 2.52-.32"></path>
+    <path d="M9.9 9.9a2.8 2.8 0 0 0 4.2 4.2"></path>
+  </svg>
+`;
+
+const REMOVE_ICON = `
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M6 6 18 18"></path>
+    <path d="m18 6-12 12"></path>
+  </svg>
+`;
+
+function updateOverlayDimmedState(canvas, eyeButton, dimmed) {
+  if (dimmed) {
+    canvas.style.opacity = "0.25";
+    eyeButton.innerHTML = EYE_OFF_ICON;
+    eyeButton.setAttribute("aria-label", "Show translated image");
+    eyeButton.setAttribute("title", "Show translated image");
+  } else {
+    canvas.style.removeProperty("opacity");
+    eyeButton.innerHTML = EYE_ICON;
+    eyeButton.setAttribute("aria-label", "Dim translated image");
+    eyeButton.setAttribute("title", "Dim translated image");
+  }
+  eyeButton.setAttribute("aria-pressed", String(dimmed));
+}
+
+function createOverlayControls(entry) {
+  const controls = document.createElement("div");
+  controls.className = "translect-overlay-controls";
+
+  const eyeButton = document.createElement("button");
+  eyeButton.className = "translect-overlay-control translect-overlay-eye";
+  eyeButton.type = "button";
+  eyeButton.innerHTML = EYE_ICON;
+  eyeButton.setAttribute("aria-label", "Dim translated image");
+  eyeButton.setAttribute("aria-pressed", "false");
+  eyeButton.setAttribute("title", "Dim translated image");
+
+  const removeButton = document.createElement("button");
+  removeButton.className = "translect-overlay-control translect-overlay-remove";
+  removeButton.type = "button";
+  removeButton.innerHTML = REMOVE_ICON;
+  removeButton.setAttribute("aria-label", "Remove translated image");
+  removeButton.setAttribute("title", "Remove translated image");
+
+  eyeButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const isDimmed = eyeButton.getAttribute("aria-pressed") === "true";
+    updateOverlayDimmedState(entry.canvas, eyeButton, !isDimmed);
+  });
+
+  removeButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    removeOverlayEntry(entry);
+  });
+
+  controls.append(eyeButton, removeButton);
+  return controls;
 }
 
 function attachOverlay({ anchorElement, canvas, fixedRect }) {
@@ -487,15 +620,18 @@ function attachOverlay({ anchorElement, canvas, fixedRect }) {
 
   const node = document.createElement("div");
   node.className = "translect-overlay";
-  node.append(configureOverlayCanvas(canvas));
-  ensureRoot().append(node);
 
   const entry = {
+    anchorElement,
+    canvas: configureOverlayCanvas(canvas),
     getRect: fixedRect
       ? () => fixedRect
       : () => anchorElement?.getBoundingClientRect(),
     node
   };
+
+  node.append(entry.canvas, createOverlayControls(entry));
+  ensureRoot().append(node);
 
   state.overlayEntries.add(entry);
   if (anchorElement) {

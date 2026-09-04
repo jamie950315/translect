@@ -82,3 +82,4 @@ Before reporting work as complete:
 - Unchanged text, numeric-only rewrites, and ASCII-only metadata/code/other rewrites do not create overlays; this prevents rotated chart labels and OCR noise from being redrawn as oversized horizontal text.
 - Reddit translation cache version 2 intentionally ignores older cached overlays created before the Apple Intelligence rendering safeguards.
 - The Swift native messaging executable and Safari handler both recognize `apple-intelligence-translate` requests and return the same local translation response shape.
+- Every translated overlay has click-operated remove and visibility controls; the eye toggle dims only the translated canvas to 25% and keeps the controls available for restoring it.
