@@ -44,7 +44,7 @@ To make the translated text cover the original text more naturally, the renderer
 - Detect text blocks and their bounds
 - Blur and recolor the original text region
 - Fit translated text back into the same area
-- Reapply text color, outline, alignment, and rotation hints
+- Reapply text color, outline, alignment, and rotation hints, including vertical chart labels
 
 ### iOS OCR Server Mode
 

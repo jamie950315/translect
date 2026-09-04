@@ -21,6 +21,10 @@ function horizontalOverlapRatio(first, second) {
 
 function shouldJoinLine(group, line) {
   const last = group.lines.at(-1);
+  if (Math.abs(line.rotation - last.rotation) > 4) {
+    return false;
+  }
+
   const verticalGap = line.y - (last.y + last.height);
   const averageHeight = (line.height + last.height) / 2;
   const leftDelta = Math.abs(line.x - last.x);
@@ -36,12 +40,14 @@ function shouldJoinLine(group, line) {
   );
 }
 
-function defaultStyle() {
+function defaultStyle(rotation = 0) {
+  const normalizedRotation = Math.abs(Number(rotation) || 0) % 180;
+  const isVertical = normalizedRotation >= 78 && normalizedRotation <= 102;
   return {
     textColor: "#111111",
     backgroundColor: "#f5f1e8",
     backgroundOpacity: 0.7,
-    align: "left",
+    align: isVertical ? "center" : "left",
     container: "image-text",
     fontWeight: 540,
     strokeColor: "#ffffff",
@@ -56,17 +62,18 @@ function boxFromObservation(observation, imageWidth, imageHeight) {
     x: clampNumber(source.x, 0, imageWidth, 0),
     y: clampNumber(source.y, 0, imageHeight, 0),
     width: clampNumber(source.width, 0, imageWidth, 0),
-    height: clampNumber(source.height, 0, imageHeight, 0)
+    height: clampNumber(source.height, 0, imageHeight, 0),
+    rotation: clampNumber(source.rotation ?? observation?.rotation, -180, 180, 0)
   };
 }
 
-function normalizePixelBounds(rect, imageWidth, imageHeight) {
+function normalizePixelBounds(rect, imageWidth, imageHeight, rotation = 0) {
   return {
     x: clampNumber((rect.x / imageWidth) * 1000, 0, 1000, 0),
     y: clampNumber((rect.y / imageHeight) * 1000, 0, 1000, 0),
     width: clampNumber((rect.width / imageWidth) * 1000, 0, 1000, 0),
     height: clampNumber((rect.height / imageHeight) * 1000, 0, 1000, 0),
-    rotation: 0
+    rotation: clampNumber(rotation, -180, 180, 0)
   };
 }
 
@@ -133,8 +140,8 @@ export function normalizeMacosVisionOcrResult(imageId, responseJson) {
         provider: "macos-vision",
         sourceLineCount: 1,
         sourceText: line.sourceText,
-        bounds: normalizePixelBounds(line, imageWidth, imageHeight),
-        style: defaultStyle()
+        bounds: normalizePixelBounds(line, imageWidth, imageHeight, line.rotation),
+        style: defaultStyle(line.rotation)
       }))
       .filter((block) => block.sourceText && block.bounds.width > 0 && block.bounds.height > 0)
   };
@@ -172,7 +179,7 @@ export function normalizeAppleIntelligenceResult(imageId, responseJson) {
       const box = boxFromObservation(observation, imageWidth, imageHeight);
 
       return {
-        bounds: normalizePixelBounds(box, imageWidth, imageHeight),
+        bounds: normalizePixelBounds(box, imageWidth, imageHeight, box.rotation),
         flowBoxIndex: clampNumber(
           observation?.flow_box_index ?? observation?.flowBoxIndex,
           0,
@@ -186,7 +193,7 @@ export function normalizeAppleIntelligenceResult(imageId, responseJson) {
         semanticLabel,
         sourceLineCount: 1,
         sourceText,
-        style: defaultStyle(),
+        style: defaultStyle(box.rotation),
         translatedText: ""
       };
     })

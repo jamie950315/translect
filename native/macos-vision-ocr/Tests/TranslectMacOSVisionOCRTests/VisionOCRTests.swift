@@ -2,6 +2,39 @@ import XCTest
 @testable import TranslectMacOSVisionOCR
 
 final class VisionOCRTests: XCTestCase {
+    func testDetectsBothVerticalTextDirectionsFromVisionCorners() {
+        XCTAssertEqual(
+            normalizedTextRotation(
+                topLeft: CGPoint(x: 0.1, y: 0.2),
+                topRight: CGPoint(x: 0.1, y: 0.8),
+                imageWidth: 1000,
+                imageHeight: 1000
+            ),
+            -90
+        )
+        XCTAssertEqual(
+            normalizedTextRotation(
+                topLeft: CGPoint(x: 0.1, y: 0.8),
+                topRight: CGPoint(x: 0.1, y: 0.2),
+                imageWidth: 1000,
+                imageHeight: 1000
+            ),
+            90
+        )
+    }
+
+    func testKeepsHorizontalVisionTextUnrotated() {
+        XCTAssertEqual(
+            normalizedTextRotation(
+                topLeft: CGPoint(x: 0.1, y: 0.5),
+                topRight: CGPoint(x: 0.8, y: 0.5),
+                imageWidth: 1000,
+                imageHeight: 1000
+            ),
+            0
+        )
+    }
+
     func testPreservesTheRequestIDWhenImageDataCannotBeRead() {
         let message = Data(
             #"{"id":"image-a","imageDataUrl":"not-a-data-url"}"#.utf8
@@ -85,6 +118,32 @@ final class VisionOCRTests: XCTestCase {
         XCTAssertEqual(groups.map(\.observationIndexes), [[0], [1], [2]])
     }
 
+    func testKeepsHorizontalAndVerticalVisionTextInSeparateGroups() {
+        let observations = [
+            VisionOCRObservation(
+                text: "Capability coverage",
+                confidence: 1,
+                x: 104,
+                y: 283,
+                width: 23,
+                height: 194,
+                rotation: -90
+            ),
+            VisionOCRObservation(
+                text: "60%",
+                confidence: 1,
+                x: 151,
+                y: 347,
+                width: 59,
+                height: 16
+            )
+        ]
+
+        let groups = groupAppleIntelligenceObservations(observations)
+
+        XCTAssertEqual(groups.map(\.observationIndexes), [[0], [1]])
+    }
+
     func testMergesLabelsAndTranslationsBackOntoExactVisionBoxes() {
         let observations = [
             VisionOCRObservation(
@@ -128,6 +187,7 @@ final class VisionOCRTests: XCTestCase {
         XCTAssertEqual(merged[1].flow_box_index, 1)
         XCTAssertEqual(merged[1].x, 42)
         XCTAssertEqual(merged[1].y, 58)
+        XCTAssertEqual(merged[1].rotation, 0)
     }
 
     func testOmitsUnchangedAppleIntelligenceTextFromOverlays() {

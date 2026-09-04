@@ -1,0 +1,132 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Translect Vertical Provider Text Harness</title>
+    <style>
+      body {
+        margin: 24px;
+        background: #ffffff;
+      }
+
+      img {
+        display: block;
+        width: 400px;
+        height: 300px;
+      }
+    </style>
+  </head>
+  <body>
+    <img id="target" alt="chart with a vertical axis title" />
+    <script>
+      const listeners = [];
+      const sourceCanvas = document.createElement("canvas");
+      sourceCanvas.width = 400;
+      sourceCanvas.height = 300;
+      const sourceContext = sourceCanvas.getContext("2d");
+      sourceContext.fillStyle = "#ffffff";
+      sourceContext.fillRect(0, 0, 400, 300);
+      sourceContext.font = "18px Arial";
+      const sourceLabel = "Capability coverage";
+      const sourceMetrics = sourceContext.measureText(sourceLabel);
+      const sourceLabelBounds = {
+        x: 62 - sourceMetrics.actualBoundingBoxAscent - 4,
+        y: 242 - sourceMetrics.width - 4,
+        width: sourceMetrics.actualBoundingBoxAscent + sourceMetrics.actualBoundingBoxDescent + 8,
+        height: 300 - (242 - sourceMetrics.width - 4)
+      };
+      sourceContext.save();
+      sourceContext.translate(62, 242);
+      sourceContext.rotate(-Math.PI / 2);
+      sourceContext.fillStyle = "#d32f2f";
+      sourceContext.fillText(sourceLabel, 0, 0);
+      sourceContext.restore();
+
+      const sourceDataUrl = sourceCanvas.toDataURL("image/png");
+      document.getElementById("target").src = sourceDataUrl;
+
+      globalThis.chrome = {
+        runtime: {
+          onMessage: {
+            addListener(listener) {
+              listeners.push(listener);
+            }
+          },
+          sendMessage(message) {
+            if (message.type === "get-settings") {
+              return Promise.resolve({
+                settings: {
+                  alwaysAutoDetect: false,
+                  apiEndpoint: "https://api.openai.test/v1",
+                  apiKey: "test",
+                  model: "gpt-5.4-mini",
+                  targetLanguage: "Traditional Chinese",
+                  triggerUsesAutoMode: false
+                }
+              });
+            }
+            if (message.type === "capture-visible-tab") {
+              return Promise.resolve({ ok: true, dataUrl: sourceDataUrl });
+            }
+            if (message.type === "translate-region") {
+              return Promise.resolve({
+                ok: true,
+                translation: {
+                  blocks: [
+                    {
+                      bounds: {
+                        x: sourceLabelBounds.x / 400 * 1000,
+                        y: sourceLabelBounds.y / 300 * 1000,
+                        width: sourceLabelBounds.width / 400 * 1000,
+                        height: sourceLabelBounds.height / 300 * 1000,
+                        rotation: -90
+                      },
+                      flowBoxIndex: 0,
+                      flowGroupId: "chart:axis",
+                      flowText: "能力覆蓋率",
+                      provider: "macos-vision",
+                      sourceLineCount: 1,
+                      sourceText: "Capability coverage",
+                      style: {
+                        align: "center",
+                        backgroundColor: "#ffffff",
+                        backgroundOpacity: 0.7,
+                        container: "image-text",
+                        fontWeight: 540,
+                        strokeColor: "#ffffff",
+                        strokeWidth: 0,
+                        textColor: "#111111",
+                        verticalAlign: "middle"
+                      },
+                      translatedText: ""
+                    }
+                  ]
+                }
+              });
+            }
+            return Promise.resolve({ ok: true });
+          }
+        }
+      };
+
+      async function run() {
+        await import("/dist/content.js");
+        const listener = listeners[0];
+        await new Promise((resolve, reject) => {
+          listener(
+            { type: "page-action", action: "auto-translate-visible" },
+            null,
+            (response) => response?.ok ? resolve() : reject(new Error(response?.error || "failed"))
+          );
+        });
+        document.body.dataset.ready = "true";
+      }
+
+      window.addEventListener("load", () => {
+        run().catch((error) => {
+          document.body.dataset.error = String(error);
+        });
+      });
+    </script>
+  </body>
+</html>

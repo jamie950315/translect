@@ -36,6 +36,7 @@ struct AppleIntelligenceObservation: Encodable {
     let y: Double
     let width: Double
     let height: Double
+    let rotation: Double
     let flow_group_id: String
     let flow_box_index: Int
     let semantic_label: String
@@ -85,6 +86,10 @@ private func shouldJoinAppleIntelligenceLine(
     _ previous: VisionOCRObservation,
     _ next: VisionOCRObservation
 ) -> Bool {
+    guard abs(previous.rotation - next.rotation) <= 4 else {
+        return false
+    }
+
     let verticalGap = next.y - (previous.y + previous.height)
     let averageHeight = (next.height + previous.height) / 2
     let leftDelta = abs(next.x - previous.x)
@@ -207,6 +212,7 @@ func mergeAppleIntelligenceTranslations(
             y: observation.y,
             width: observation.width,
             height: observation.height,
+            rotation: observation.rotation,
             flow_group_id: "\(imageID):flow:\(placement.groupIndex)",
             flow_box_index: placement.boxIndex,
             semantic_label: translation.semanticLabel,

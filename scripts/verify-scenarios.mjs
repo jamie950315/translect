@@ -57,6 +57,9 @@ let activeUploadedAssetName = "";
 let mockImageRequests = [];
 
 function contentTypeForPath(pathname) {
+  if (pathname.endsWith(".js")) {
+    return "text/javascript; charset=utf-8";
+  }
   if (pathname.endsWith(".html")) {
     return "text/html; charset=utf-8";
   }
@@ -706,9 +709,11 @@ async function startFixtureServer() {
       } else if (pathname.endsWith(".html")) {
         activeUploadedAssetName = "";
       }
-      const filePath = path.join(fixtureDir, pathname.replace(/^\/+/, ""));
+      const filePath = pathname.startsWith("/dist/")
+        ? path.join(rootDir, pathname.replace(/^\/+/, ""))
+        : path.join(fixtureDir, pathname.replace(/^\/+/, ""));
 
-      if (!filePath.startsWith(fixtureDir)) {
+      if (!filePath.startsWith(fixtureDir) && !filePath.startsWith(extensionPath)) {
         response.writeHead(403);
         response.end("Forbidden");
         return;
@@ -984,6 +989,55 @@ async function runSuite() {
     const serviceWorker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
     await waitForBootstrapDefaults(serviceWorker);
     const summary = [];
+
+    {
+      const browser = await chromium.launch({ headless: true });
+      try {
+        const page = await browser.newPage({ viewport: { width: 520, height: 420 } });
+        await page.goto(`${server.origin}/vertical-provider-text.html`, {
+          waitUntil: "domcontentloaded",
+          timeout: 60000
+        });
+        await page.waitForFunction(() => document.body.dataset.ready === "true", null, {
+          timeout: 10000
+        });
+        const inkBounds = await page.locator(".translect-overlay canvas").evaluate((canvas) => {
+          const context = canvas.getContext("2d");
+          const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+          let left = width;
+          let right = -1;
+          let top = height;
+          let bottom = -1;
+
+          for (let y = 0; y < height; y += 1) {
+            for (let x = 0; x < width; x += 1) {
+              const offset = (y * width + x) * 4;
+              if (data[offset] < 80 && data[offset + 1] < 80 && data[offset + 2] < 80) {
+                left = Math.min(left, x);
+                right = Math.max(right, x);
+                top = Math.min(top, y);
+                bottom = Math.max(bottom, y);
+              }
+            }
+          }
+
+          return {
+            height: bottom >= top ? bottom - top + 1 : 0,
+            width: right >= left ? right - left + 1 : 0
+          };
+        });
+        assert.ok(
+          inkBounds.height > inkBounds.width * 2,
+          `expected vertical translated ink, got ${JSON.stringify(inkBounds)}`
+        );
+        await page.screenshot({
+          path: path.join(outputDir, "vertical-provider-text-after.png")
+        });
+        summary.push({ scenario: "vertical_provider_text", inkBounds });
+      } finally {
+        await browser.close();
+      }
+    }
 
     await setSettings(serviceWorker, server.origin, {
       alwaysAutoDetect: false,

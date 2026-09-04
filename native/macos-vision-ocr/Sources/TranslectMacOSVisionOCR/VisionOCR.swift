@@ -26,6 +26,25 @@ struct VisionOCRObservation: Encodable {
     let y: Double
     let width: Double
     let height: Double
+    let rotation: Double
+
+    init(
+        text: String,
+        confidence: Float,
+        x: Double,
+        y: Double,
+        width: Double,
+        height: Double,
+        rotation: Double = 0
+    ) {
+        self.text = text
+        self.confidence = confidence
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.rotation = rotation
+    }
 }
 
 enum VisionOCRError: Error, CustomStringConvertible {
@@ -75,6 +94,25 @@ func pixelRect(from normalizedRect: CGRect, imageWidth: Int, imageHeight: Int) -
     return CGRect(x: x, y: y, width: width, height: height)
 }
 
+func normalizedTextRotation(
+    topLeft: CGPoint,
+    topRight: CGPoint,
+    imageWidth: Int,
+    imageHeight: Int
+) -> Double {
+    let deltaX = (topRight.x - topLeft.x) * CGFloat(imageWidth)
+    let deltaY = -(topRight.y - topLeft.y) * CGFloat(imageHeight)
+    let edgeLength = hypot(deltaX, deltaY)
+    let edgeAngle = atan2(deltaY, deltaX) * 180 / .pi
+    let verticalEdge = edgeLength >= 2 && abs(edgeAngle) >= 45 && abs(edgeAngle) <= 135
+
+    if verticalEdge {
+        return edgeAngle < 0 ? -90 : 90
+    }
+
+    return 0
+}
+
 func recognizeText(request: VisionOCRRequest) throws -> VisionOCRResponse {
     let imageData = try decodeImageDataUrl(request.imageDataUrl)
     let image = try makeCGImage(from: imageData)
@@ -101,6 +139,12 @@ func recognizeText(request: VisionOCRRequest) throws -> VisionOCRResponse {
                 imageWidth: imageWidth,
                 imageHeight: imageHeight
             )
+            let rotation = normalizedTextRotation(
+                topLeft: observation.topLeft,
+                topRight: observation.topRight,
+                imageWidth: imageWidth,
+                imageHeight: imageHeight
+            )
 
             return VisionOCRObservation(
                 text: candidate.string,
@@ -108,7 +152,8 @@ func recognizeText(request: VisionOCRRequest) throws -> VisionOCRResponse {
                 x: Double(rect.origin.x),
                 y: Double(rect.origin.y),
                 width: Double(rect.width),
-                height: Double(rect.height)
+                height: Double(rect.height),
+                rotation: rotation
             )
         }
     }

@@ -6,6 +6,7 @@ import {
 import {
   expandRect,
   normalizeBoundsToPixels,
+  orientProviderTextRect,
   rectIsLargeEnough
 } from "../shared/geometry.js";
 import { configureOverlayCanvas } from "./overlay-canvas.js";
@@ -1494,6 +1495,9 @@ async function renderTranslatedCanvas(imageDataUrl, translation) {
       const placementRect = usesProviderOcr
         ? rect
         : resolvePlacementRect(rect, textArea, containerKind, block);
+      const textRect = usesProviderOcr
+        ? orientProviderTextRect(placementRect)
+        : placementRect;
       const backgroundColor =
         textArea.backgroundColor || block.style.backgroundColor || sampleRegionColor(sourceCtx, placementRect);
       const textColor = readableTextColor(
@@ -1505,7 +1509,7 @@ async function renderTranslatedCanvas(imageDataUrl, translation) {
         backgroundColor,
         block,
         coverRect: placementRect,
-        rect: placementRect,
+        rect: textRect,
         resolvedStyle: {
           ...block.style,
           backgroundColor,
@@ -1565,7 +1569,6 @@ async function renderTranslatedCanvas(imageDataUrl, translation) {
         providerCoverRect.x + providerCoverRect.width / 2,
         providerCoverRect.y + providerCoverRect.height / 2
       );
-      outputCtx.rotate((providerCoverRect.rotation * Math.PI) / 180);
       drawTightOcrBlurCover(
         outputCtx,
         sourceCanvas,
@@ -1578,7 +1581,6 @@ async function renderTranslatedCanvas(imageDataUrl, translation) {
         providerCoverRect.x + providerCoverRect.width / 2,
         providerCoverRect.y + providerCoverRect.height / 2
       );
-      outputCtx.rotate((providerCoverRect.rotation * Math.PI) / 180);
       drawCompactOcrCover(
         outputCtx,
         providerCoverRect,

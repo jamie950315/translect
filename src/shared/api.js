@@ -43,7 +43,8 @@ export function buildSystemPrompt(targetLanguage) {
     "11. Set container to one of: speech-bubble, ui-card, caption-strip, plain-text, image-text.",
     "12. Set vertical_align to top, middle, or bottom based on the original layout.",
     "13. Split complicated layouts into many small blocks. Tables need one block per cell or header. Message screenshots need one block per bubble or UI label. Maps and memes need one block per label, preserving rotation.",
-    "14. Do not translate or block out icons, avatars, reaction buttons, download buttons, phone status bars, or purely decorative marks."
+    "14. Set bounds.rotation to the source text's reading direction in degrees: 0 for left-to-right, -90 for bottom-to-top, and 90 for top-to-bottom. Keep width and height as the unrotated local text box dimensions.",
+    "15. Do not translate or block out icons, avatars, reaction buttons, download buttons, phone status bars, or purely decorative marks."
   ].join("\n");
 }
 

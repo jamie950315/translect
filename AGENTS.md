@@ -83,3 +83,4 @@ Before reporting work as complete:
 - Reddit translation cache version 2 intentionally ignores older cached overlays created before the Apple Intelligence rendering safeguards.
 - The Swift native messaging executable and Safari handler both recognize `apple-intelligence-translate` requests and return the same local translation response shape.
 - Every translated overlay has click-operated remove and visibility controls; the eye toggle dims only the translated canvas to 25% and keeps the controls available for restoring it.
+- Apple Vision OCR preserves horizontal and vertical reading direction. Vertical translations use the original axis-aligned OCR cover while rotating and fitting translated text inside the same detected frame.

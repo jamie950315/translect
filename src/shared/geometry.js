@@ -17,6 +17,28 @@ export function normalizeBoundsToPixels(bounds, width, height) {
   };
 }
 
+export function orientProviderTextRect(rect) {
+  const rotation = Number(rect?.rotation) || 0;
+  const normalizedRotation = ((rotation % 360) + 360) % 360;
+  const isQuarterTurn =
+    (normalizedRotation >= 78 && normalizedRotation <= 102) ||
+    (normalizedRotation >= 258 && normalizedRotation <= 282);
+
+  if (!isQuarterTurn) {
+    return { ...rect };
+  }
+
+  const centerX = rect.x + rect.width / 2;
+  const centerY = rect.y + rect.height / 2;
+  return {
+    x: centerX - rect.height / 2,
+    y: centerY - rect.width / 2,
+    width: rect.height,
+    height: rect.width,
+    rotation
+  };
+}
+
 export function expandRect(rect, padding, maxWidth, maxHeight) {
   const x = clamp(rect.x - padding, 0, maxWidth);
   const y = clamp(rect.y - padding, 0, maxHeight);

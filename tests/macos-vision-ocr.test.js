@@ -77,6 +77,44 @@ describe("macOS Vision OCR helpers", () => {
     });
   });
 
+  test("preserves native Vision rotation for a vertical chart label", () => {
+    const result = normalizeMacosVisionOcrResult("chart", {
+      ok: true,
+      image_width: 1155,
+      image_height: 1200,
+      observations: [
+        {
+          text: "Capability coverage",
+          x: 104.8,
+          y: 283.8,
+          width: 23.3,
+          height: 194.4,
+          rotation: -90
+        }
+      ]
+    });
+
+    expect(result.blocks[0].bounds.rotation).toBe(-90);
+    expect(result.blocks[0].style.align).toBe("center");
+  });
+
+  test("does not merge nearby OCR observations with different directions", () => {
+    const result = normalizeMacosVisionOcrResult("chart", {
+      ok: true,
+      image_width: 400,
+      image_height: 400,
+      observations: [
+        { text: "Vertical axis", x: 20, y: 80, width: 20, height: 180, rotation: -90 },
+        { text: "Horizontal label", x: 30, y: 90, width: 160, height: 20, rotation: 0 }
+      ]
+    });
+
+    expect(result.blocks.map((block) => block.flowGroupId)).toEqual([
+      "chart:flow:0",
+      "chart:flow:1"
+    ]);
+  });
+
   test("keeps closely stacked tweet metadata, controls, and body in separate flow groups", () => {
     const result = normalizeMacosVisionOcrResult("tweet", {
       ok: true,
