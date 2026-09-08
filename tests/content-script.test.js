@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { MESSAGE_TYPES, PAGE_ACTIONS } from "../src/shared/defaults.js";
+import { MESSAGE_TYPES, PAGE_ACTIONS, STORAGE_KEY } from "../src/shared/defaults.js";
 
 async function setup(settings = {}) {
   vi.resetModules();
@@ -56,7 +56,10 @@ async function setup(settings = {}) {
     height = 200;
     set src(value) { queueMicrotask(() => this.onload()); }
   });
-  vi.stubGlobal("chrome", { runtime: { sendMessage, onMessage: { addListener() {}, removeListener() {} } } });
+  vi.stubGlobal("chrome", {
+    runtime: { sendMessage, onMessage: { addListener() {}, removeListener() {} } },
+    storage: { local: { get: vi.fn(async () => ({ [STORAGE_KEY]: settings })) } }
+  });
   await import("../src/content/content-script.js");
   const action = (action = PAGE_ACTIONS.AUTO_TRANSLATE_VISIBLE) => new Promise((resolve) => {
     window.__translectRuntimeMessageHandler({ type: MESSAGE_TYPES.PAGE_ACTION, action }, null, resolve);
@@ -136,8 +139,14 @@ describe("content script translation error reporting", () => {
   });
 
   test("does not silently replace a settings failure with defaults", async () => {
-    const { action, sendMessage } = await setup();
-    sendMessage.mockResolvedValue({ ok: false, error: "Settings storage unavailable" });
+    const { action } = await setup();
+    chrome.storage.local.get.mockRejectedValue(new Error("Settings storage unavailable"));
     expect(await action()).toEqual({ ok: false, error: "Settings storage unavailable" });
+  });
+
+  test("settings refresh replies without a nested background message", async () => {
+    const { action, sendMessage } = await setup();
+    expect(await action(PAGE_ACTIONS.SETTINGS_UPDATED)).toEqual({ ok: true });
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 });

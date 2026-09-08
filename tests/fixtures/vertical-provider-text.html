@@ -119,6 +119,9 @@
       };
 
       const originalSendMessage = chrome.runtime.sendMessage;
+      chrome.storage = { local: { async get() {
+        return { "translect.settings": (await originalSendMessage({ type: "get-settings" })).settings };
+      } } };
       chrome.runtime.sendMessage = async (message) => {
         const response = await originalSendMessage(message);
         if (message.type === "translate-region" && location.search.includes("overlap")) {

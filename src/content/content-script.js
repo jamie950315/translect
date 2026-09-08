@@ -1,7 +1,8 @@
 import { installWebExtensionApiCompatibility } from "../shared/browser-compat.js";
 import {
   MESSAGE_TYPES,
-  PAGE_ACTIONS
+  PAGE_ACTIONS,
+  STORAGE_KEY
 } from "../shared/defaults.js";
 import {
   expandRect,
@@ -2160,11 +2161,10 @@ async function getSettings() {
     return state.settings;
   }
 
-  const response = await sendMessage({ type: MESSAGE_TYPES.GET_SETTINGS });
-  if (!response?.ok || !response.settings) {
-    throw new Error(response?.error || "Could not load Translect settings.");
-  }
-  state.settings = normalizeSettings(response.settings);
+  // Settings are already available to the isolated extension content script.
+  // Avoid a nested round-trip to the worker while it awaits a page-action reply.
+  const stored = await chrome.storage.local.get(STORAGE_KEY);
+  state.settings = normalizeSettings(stored[STORAGE_KEY] || {});
   return state.settings;
 }
 

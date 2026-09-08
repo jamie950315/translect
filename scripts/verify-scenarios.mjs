@@ -1049,6 +1049,20 @@ async function runSuite() {
         assert.equal(await page.evaluate(() => document.body.dataset.lateCover), "false",
           "Overlapping covers must be painted before any translated text");
         summary.push({ scenario: "overlapping_covers_preserve_translated_text" });
+        const popup = await browser.newPage({ viewport: { width: 380, height: 560 } });
+        const popupHtml = (await readFile(path.join(rootDir, "src/popup/popup.html"), "utf8"))
+          .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, "")
+          .replace(/<link\b[^>]*>/g, "");
+        await popup.setContent(popupHtml);
+        await popup.addStyleTag({ content: await readFile(path.join(rootDir, "src/popup/popup.css"), "utf8") });
+        await popup.locator("#saveButton").scrollIntoViewIfNeeded();
+        const saveBounds = await popup.locator("#saveButton").boundingBox();
+        assert.ok(saveBounds.y >= 0 && saveBounds.y + saveBounds.height <= 560);
+        assert.ok(await popup.evaluate(() => document.body.scrollTop > 0), "Popup must scroll internally inside Safari's capped view");
+        await popup.locator("#saveButton").click();
+        await popup.screenshot({ path: path.join(outputDir, "popup-scrolled-actions.png") });
+        summary.push({ scenario: "popup_actions_reachable_in_capped_view", saveBounds });
+        await popup.close();
       } finally {
         await browser.close();
       }

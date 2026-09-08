@@ -85,6 +85,7 @@
       let translateCalls = 0;
 
       globalThis.chrome = {
+        storage: { local: { async get() { return { "translect.settings": settings }; } } },
         runtime: {
           onMessage: {
             addListener(listener) {
