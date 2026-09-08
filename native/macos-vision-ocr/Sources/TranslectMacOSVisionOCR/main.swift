@@ -8,7 +8,9 @@ do {
     while let messageData = try readNativeMessage(read: {
         try FileHandle.standardInput.read(upToCount: $0) ?? Data()
     }) {
-        if isAppleIntelligenceTranslationRequest(messageData) {
+        if isSettingsPersistenceRequest(messageData) {
+            try writeNativeMessage(handleSettingsPersistenceMessage(messageData))
+        } else if isAppleIntelligenceTranslationRequest(messageData) {
             try await writeNativeMessage(
                 handleAppleIntelligenceMessage(messageData)
             )

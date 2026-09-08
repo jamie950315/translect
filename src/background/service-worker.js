@@ -33,26 +33,25 @@ import {
 import { requestChatCompletion, requestJson } from "./http-request.js";
 import { createCaptureVisibleTabLimiter } from "./capture-rate-limit.js";
 import { dispatchPageAction } from "./page-action-dispatch.js";
+import { createRetainedSettingsStore, usesMacSettingsRetention } from "./retained-settings.js";
 
 installWebExtensionApiCompatibility();
 
 const scheduleVisibleTabCapture = createCaptureVisibleTabLimiter();
+const settingsRetainedOnMac = usesMacSettingsRetention();
+const settingsStore = createRetainedSettingsStore({
+  storage: chrome.storage.local,
+  nativeRequest: settingsRetainedOnMac
+    ? (message) => sendNativeMessageToNativeApp(DEFAULT_SETTINGS.macosVisionHostName, message)
+    : null
+});
 
 async function getStoredSettings() {
-  const result = await chrome.storage.local.get(STORAGE_KEY);
-  return normalizeSettings(result[STORAGE_KEY] || DEFAULT_SETTINGS);
+  return settingsStore.get();
 }
 
 async function saveStoredSettings(inputSettings = {}) {
-  const currentSettings = await getStoredSettings();
-  const nextSettings = normalizeSettings({
-    ...currentSettings,
-    ...inputSettings
-  });
-
-  await chrome.storage.local.set({
-    [STORAGE_KEY]: nextSettings
-  });
+  const nextSettings = await settingsStore.save(inputSettings);
   await syncActionBadge(nextSettings);
 
   return nextSettings;
@@ -392,7 +391,9 @@ async function toggleAlwaysAutoDetect() {
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
-  await saveStoredSettings(await getStoredSettings());
+  const settings = await getStoredSettings();
+  if (!settingsRetainedOnMac) await chrome.storage.local.set({ [STORAGE_KEY]: settings });
+  await syncActionBadge(settings);
 });
 
 chrome.runtime.onStartup.addListener(async () => {
@@ -451,6 +452,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       case MESSAGE_TYPES.GET_SETTINGS: {
         return {
+          settingsRetainedOnMac,
           settings: await getStoredSettings()
         };
       }

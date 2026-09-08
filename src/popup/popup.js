@@ -26,6 +26,7 @@ const elements = {
   saveButton: document.getElementById("saveButton"),
   shortcutText: document.getElementById("shortcutText"),
   status: document.getElementById("status"),
+  macRetentionNote: document.getElementById("macRetentionNote"),
   targetLanguage: document.getElementById("targetLanguage"),
   triggerUsesAutoMode: document.getElementById("triggerUsesAutoMode"),
   useAppleIntelligence: document.getElementById("useAppleIntelligence"),
@@ -151,6 +152,7 @@ async function initialize() {
     throw new Error(response?.error || "Could not load saved settings.");
   }
   fillForm(normalizeSettings(response.settings));
+  elements.macRetentionNote.hidden = !response.settingsRetainedOnMac;
   for (const button of [elements.saveButton, elements.manualButton, elements.autoButton]) {
     button.disabled = false;
   }

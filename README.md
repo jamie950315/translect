@@ -85,6 +85,14 @@ This mode requires macOS 26 or later, an Apple Intelligence-capable Mac, Apple I
 
 Apple Intelligence errors, including rejected or incomplete translations, are reported directly. This mode never switches to a remote API automatically.
 
+### Settings Retention on Mac (Safari)
+
+Safari automatically retains your API key, API address, model, target language, and all provider/behavior switches in this Mac user's login Keychain. Save settings normally; there is no file to export or password to remember. Reinstalling Translect or using another build with the same signing identity restores the retained profile automatically.
+
+Existing browser settings migrate once without overwriting an existing Mac profile. The API key is then removed from the browser's settings cache. Keychain failures are reported and do not silently replace your profile with defaults. Nothing is uploaded or synchronized to iCloud. Chromium keeps its existing browser-only settings behavior.
+
+Deleting the app does **not** delete retained settings. To permanently remove them, remove Translect's browser data and delete the **Translect settings** item (`com.translect.settings`, account `default`) in Keychain Access. A different Mac user, a cleared Keychain, or a differently signed build is not guaranteed access to the saved profile.
+
 ### Error Reporting
 
 Remote translation endpoints must support the requested JSON response format. Unsupported formats, incomplete translations, and API failures are reported rather than silently retried with different settings. Remote translation and iOS OCR requests time out after 120 seconds; image downloads time out after 30 seconds. A failed image can be retried manually without reloading the page. Changing tabs while a screenshot is being taken cancels that capture.

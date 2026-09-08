@@ -16,6 +16,7 @@ The project supports four translation flows:
 - `src/manifest.json`: extension manifest, permissions, commands, popup, and content script registration.
 - `src/background/service-worker.js`: settings storage, tab capture, API calls, command handling, and translation routing.
 - `src/background/http-request.js`: bounded HTTP requests and original API error reporting; no automatic request-format downgrade.
+- `src/background/retained-settings.js`: serialized Safari Keychain restoration/migration/save and browser cache synchronization.
 - `src/content/content-script.js`: page interaction, manual selection, auto image detection, overlay placement, rendering, and Reddit media reuse behavior.
 - `src/popup/popup.js`: popup settings form and action buttons.
 - `src/shared/api.js`: default vision-mode prompt, payload creation, assistant response parsing, and block normalization.
@@ -32,6 +33,7 @@ The project supports four translation flows:
 - `scripts/verify-scenarios.mjs`: Playwright scenario verification with a local mock API.
 - `scripts/install-macos-vision-host.mjs`: builds and registers the macOS native messaging host.
 - `native/macos-vision-ocr/`: SwiftPM native host using Apple Vision OCR.
+- `native/macos-vision-ocr/Sources/TranslectMacOSVisionOCR/PersistentSettings.swift`: versioned, atomic login Keychain settings storage shared with Safari; no settings in app-bundle files.
 - `native/macos-vision-ocr/Sources/TranslectMacOSVisionOCR/AppleIntelligenceTranslation.swift`: local text grouping, Foundation Models translation, semantic labels, availability errors, and exact Vision-box merging.
 - `safari/Translect/Translect/`: macOS-only Safari Web Extension Xcode project and native message handler.
 
@@ -75,6 +77,12 @@ Before reporting work as complete:
 
 ## Current Implementation Status
 
+- Safari automatically retains the complete settings profile in the current user's login Keychain (`com.translect.settings` / `default`, label `Translect settings`), without iCloud synchronization. Reinstallation and same-signing-identity builds read the same profile. Chromium remains browser-only unless its native protocol is explicitly used.
+- The Mac profile is authoritative. Existing browser settings migrate with `onlyIfMissing` (atomic Keychain add; a concurrent writer wins over stale migration), and an empty installation never publishes defaults. Saving updates Keychain before the browser cache; failures are visible and corrupt/newer records are not overwritten.
+- Safari caches non-key settings for content scripts with `apiKey` blank; popup/background requests read the full profile through the native bridge. Content scripts react to storage changes, including automatic restores. All settings operations in one worker are serialized.
+- Native `settings-load` returns an explicit null when no profile exists; `settings-save` returns the actual retained settings, including when `onlyIfMissing` preserves another instance's profile. Errors never contain setting values. Schema version 1 requires known string/boolean fields and mutually exclusive providers.
+- Removing the app intentionally leaves this profile behind. Permanent removal requires clearing browser settings and deleting the Keychain item. A different Mac user, a cleared Keychain, unsigned builds, or a different signing identity may not recover it automatically.
+
 - The Safari build targets macOS 13+ and Safari 17+, with its own Xcode project at `safari/Translect/Translect/Translect.xcodeproj`.
 - Safari resources are rebuilt from the shared `src/` tree before every Xcode build.
 - `VisionOCR.swift` is shared by the Chromium native host and Safari's `SafariWebExtensionHandler`, so both return the same Apple Vision OCR response format.
@@ -99,6 +107,9 @@ Before reporting work as complete:
 - Verification builds may be registered automatically by macOS. Inspect `pluginkit -m -A -D -v -i com.translect.safari.Extension` and unregister exact build-copy paths before installed-app tests, keeping `/Applications/Translect.app`. Multiple registered build copies can expose stale Safari extension contexts. Retain recoverable app backups before replacement, verify signing, and restart Safari after an app update.
 
 ## Current Verification Boundary
+
+- Retention is installed in `/Applications/Translect.app`. Verification included moving the app out of Applications, confirming the Keychain item survived, reinstalling/restarting Safari, and observing the retained model/provider settings and retention notice. Browser-profile deletion was not performed; empty-cache recovery and concurrent migration are regression-tested. Real Keychain round trips use an isolated UUID test item, never production credentials.
+- Run `TRANSLECT_TEST_KEYCHAIN=1 swift test --package-path native/macos-vision-ocr --filter PersistentSettingsTests` for the isolated real-Keychain test. It removes only its own temporary UUID item. Normal Swift tests skip this and the opt-in model integration test.
 
 - Review regression coverage includes Chromium interaction/screenshot scenarios, network failure and manual recovery, overlapping covers, popup load failures, and native framing tests. Network scenarios use a local mock API; they do not establish remote model translation quality or real iOS OCR Server interoperability.
 - Real on-device validation covers 27 source fixtures: the latest full run completed 23 and Apple refused 4 for sensitive/unsafe content; no incomplete-schema or context-overflow failures remained. Successful image requests took about 1.8-23.4 seconds (median 7.5 seconds) on this Mac. Refusals are errors, not successful translations; the opt-in integration suite intentionally fails on them. Model quality and refusal decisions remain variable.

@@ -2315,6 +2315,13 @@ chrome.runtime.onMessage.addListener(handleRuntimeMessage);
 
 if (!state.initialized) {
   state.initialized = true;
+  chrome.storage.onChanged?.addListener((changes, area) => {
+    if (area === "local" && changes[STORAGE_KEY]) {
+      applySettings().catch((error) => {
+        showToast(`Could not apply updated settings: ${error.message || String(error)}`);
+      });
+    }
+  });
   window.addEventListener("scroll", scheduleOverlayRefresh, true);
   window.addEventListener("resize", scheduleOverlayRefresh);
   startRedditReuseObserver();

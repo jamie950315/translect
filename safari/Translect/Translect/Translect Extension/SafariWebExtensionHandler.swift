@@ -11,7 +11,7 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
     func beginRequest(with context: NSExtensionContext) {
         let request = context.inputItems.first as? NSExtensionItem
         let message = request?.userInfo?[SFExtensionMessageKey]
-        logger.info("Received native translation request.")
+        logger.info("Received native request.")
 
         Task {
             let payload = await responsePayload(for: message)
@@ -38,6 +38,9 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 
         do {
             let requestData = try JSONSerialization.data(withJSONObject: message)
+            if isSettingsPersistenceRequest(requestData) {
+                return try encodeResponse(handleSettingsPersistenceMessage(requestData))
+            }
             if let request = message as? [String: Any],
                request["operation"] as? String == "apple-intelligence-translate" {
                 logger.info("Routing request to Apple Intelligence translation.")
