@@ -19,6 +19,14 @@
   <body>
     <img id="target" alt="chart with a vertical axis title" />
     <script>
+      for (const method of ["fillText", "fill", "drawImage"]) {
+        const original = CanvasRenderingContext2D.prototype[method];
+        CanvasRenderingContext2D.prototype[method] = function (...args) {
+          if (method === "fillText") this.canvas.__translectHasText = true;
+          else if (this.canvas.__translectHasText) this.canvas.__translectLateCover = true;
+          return original.apply(this, args);
+        };
+      }
       const listeners = [];
       const sourceCanvas = document.createElement("canvas");
       sourceCanvas.width = 400;
@@ -55,6 +63,7 @@
           sendMessage(message) {
             if (message.type === "get-settings") {
               return Promise.resolve({
+                ok: true,
                 settings: {
                   alwaysAutoDetect: false,
                   apiEndpoint: "https://api.openai.test/v1",
@@ -109,6 +118,18 @@
         }
       };
 
+      const originalSendMessage = chrome.runtime.sendMessage;
+      chrome.runtime.sendMessage = async (message) => {
+        const response = await originalSendMessage(message);
+        if (message.type === "translate-region" && location.search.includes("overlap")) {
+          const second = structuredClone(response.translation.blocks[0]);
+          second.flowGroupId = "second-axis";
+          second.bounds.x += 10;
+          response.translation.blocks.push(second);
+        }
+        return response;
+      };
+
       async function run() {
         await import("/dist/content.js");
         const listener = listeners[0];
@@ -119,6 +140,7 @@
             (response) => response?.ok ? resolve() : reject(new Error(response?.error || "failed"))
           );
         });
+        document.body.dataset.lateCover = String(Boolean(document.querySelector(".translect-overlay canvas")?.__translectLateCover));
         document.body.dataset.ready = "true";
       }
 

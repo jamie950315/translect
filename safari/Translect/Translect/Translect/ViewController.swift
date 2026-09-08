@@ -28,28 +28,44 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         SFSafariExtensionManager.getStateOfSafariExtension(withIdentifier: extensionBundleIdentifier) { (state, error) in
             guard let state = state, error == nil else {
-                // Insert code to inform the user that something went wrong.
+                self.showError(error?.localizedDescription ?? "Safari did not return the extension's state.")
                 return
             }
 
             DispatchQueue.main.async {
-                if #available(macOS 13, *) {
-                    webView.evaluateJavaScript("show(\(state.isEnabled), true)")
-                } else {
-                    webView.evaluateJavaScript("show(\(state.isEnabled), false)")
+                webView.evaluateJavaScript("show(\(state.isEnabled), true)") { _, error in
+                    if let error {
+                        self.showError(error.localizedDescription)
+                    }
                 }
             }
         }
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        if (message.body as! String != "open-preferences") {
-            return;
-        }
+        guard message.body as? String == "open-preferences" else { return }
 
         SFSafariApplication.showPreferencesForExtension(withIdentifier: extensionBundleIdentifier) { error in
             DispatchQueue.main.async {
+                if let error {
+                    self.showError(error.localizedDescription)
+                    return
+                }
                 NSApplication.shared.terminate(nil)
+            }
+        }
+    }
+
+    private func showError(_ message: String) {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "Unable to configure Translect in Safari"
+            alert.informativeText = message
+            alert.alertStyle = .warning
+            if let window = self.view.window {
+                alert.beginSheetModal(for: window)
+            } else {
+                alert.runModal()
             }
         }
     }

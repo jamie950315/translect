@@ -3,9 +3,5 @@ export async function getExtensionCommands(commandsApi) {
     return [];
   }
 
-  try {
-    return await commandsApi.getAll();
-  } catch {
-    return [];
-  }
+  return await commandsApi.getAll();
 }

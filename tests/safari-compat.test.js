@@ -79,14 +79,14 @@ describe("Safari Web Extension compatibility", () => {
     await expect(getExtensionCommands(undefined)).resolves.toEqual([]);
   });
 
-  test("falls back to no shortcuts when command discovery is rejected", async () => {
+  test("surfaces the original error when command discovery is rejected", async () => {
     await expect(
       getExtensionCommands({
         getAll: async () => {
           throw new Error("Commands are unavailable.");
         }
       })
-    ).resolves.toEqual([]);
+    ).rejects.toThrow("Commands are unavailable.");
   });
 
   test("creates a Safari manifest without Chrome-only key or clipboard permission", () => {

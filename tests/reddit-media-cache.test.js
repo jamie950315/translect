@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
   buildRedditTranslationCacheKey,
@@ -7,7 +7,58 @@ import {
   makeRedditTranslationCache
 } from "../src/content/reddit-media-cache.js";
 
+afterEach(() => vi.restoreAllMocks());
+
 describe("reddit media translation cache", () => {
+  test("ignores malformed percent encoding without exposing the image URL", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(extractRedditMediaKeyFromUrl("https://i.redd.it/%E0%A4%A.png?secret=private")).toBe(null);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(JSON.stringify(warn.mock.calls)).not.toMatch(/private|%E0/);
+  });
+
+  test("discards malformed persisted entries while preserving valid translations", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const query = {
+      imageUrl: "https://i.redd.it/media77.png",
+      pageUrl: "https://www.reddit.com/comments/1abcxyz/title/",
+      settings: { model: "test-model", targetLanguage: "Traditional Chinese" }
+    };
+    const translation = { blocks: [{ translatedText: "測試", bounds: { x: 10, y: 10, width: 100, height: 100 }, style: { textColor: "#111111" } }] };
+    const entry = { ...buildRedditTranslationCacheKey(query), translation, imageMetrics: { width: 200, height: 100, aspectRatio: 999 } };
+    const malformed = [null, 42, {}, { ...entry, translation: { blocks: [null] } },
+      { ...entry, translation: { blocks: "not-an-array" } },
+      { ...entry, translation: { blocks: [{ translatedText: "missing bounds" }] } },
+      { ...entry, translation: { blocks: [{ ...translation.blocks[0], style: { textColor: 42 } }] } }];
+    const cache = makeRedditTranslationCache({
+      getItem: () => JSON.stringify([...malformed, entry]), setItem() {}
+    });
+    expect(cache.find({ ...query, imageMetrics: { width: 400, height: 200 } })).toEqual(translation);
+    expect(warn).toHaveBeenCalledOnce();
+  });
+
+  test.each(["not-json-private", "null", "{}", "[null]"])("treats invalid stored data as a cache miss: %s", (stored) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const cache = makeRedditTranslationCache({ getItem: () => stored, setItem() {} });
+    expect(cache.find({ imageUrl: "https://i.redd.it/media77.png", postId: "1abcxyz" })).toBe(null);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("not-json-private");
+  });
+
+  test("storage failures are diagnosed without losing the current page translation", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const cache = makeRedditTranslationCache({
+      getItem() { throw new Error("private read error"); },
+      setItem() { throw new Error("private write error"); }
+    });
+    const query = { imageUrl: "https://i.redd.it/media77.png", postId: "1abcxyz" };
+    const translation = { blocks: [{ translatedText: "測試" }] };
+    expect(cache.remember({ ...query, translation })).toBe(true);
+    expect(cache.find(query)).toEqual(translation);
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("private");
+  });
+
   test("ignores translations saved by the previous rendering version", () => {
     const legacyTranslation = { blocks: [{ translatedText: "P8181189" }] };
     const storage = new Map([

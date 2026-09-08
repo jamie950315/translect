@@ -72,13 +72,7 @@ export function denormalizeSettings(settings) {
 }
 
 export function settingsAreReady(settings) {
-  if (settings.useAppleIntelligence) {
-    return Boolean(settings.targetLanguage);
-  }
-
-  return Boolean(
-    settings.apiEndpoint && settings.apiKey && settings.model && settings.targetLanguage
-  );
+  return getSettingsValidationError(settings) === "";
 }
 
 export function getSettingsValidationError(settings) {

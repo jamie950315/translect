@@ -1,9 +1,11 @@
 import { build, context } from "esbuild";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { watch } from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 
-const rootDir = process.cwd();
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const srcDir = path.join(rootDir, "src");
 const distDir = path.join(rootDir, "dist");
 const watchMode = process.argv.includes("--watch");
@@ -27,6 +29,7 @@ const bundleConfig = {
 
 async function copyStaticFiles() {
   await mkdir(path.join(distDir, "popup"), { recursive: true });
+  await rm(path.join(distDir, "icons"), { recursive: true, force: true });
   await cp(path.join(srcDir, "icons"), path.join(distDir, "icons"), {
     recursive: true
   });
@@ -55,6 +58,28 @@ if (watchMode) {
   const ctx = await context(bundleConfig);
   await ctx.watch();
   await copyStaticFiles();
+  let pendingCopy = Promise.resolve();
+  let copyTimer;
+  const watcher = watch(srcDir, { recursive: true }, (_event, filename) => {
+    const relativePath = filename?.toString().split(path.sep).join("/");
+    if (!relativePath || !(
+      relativePath === "manifest.json" || relativePath.startsWith("icons/") ||
+      relativePath === "icons" || relativePath === "popup/popup.html" ||
+      relativePath === "popup/popup.css"
+    )) return;
+
+    clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => {
+      pendingCopy = pendingCopy.then(copyStaticFiles).catch((error) => {
+        console.error("Failed to update extension resources:", error);
+        process.exit(1);
+      });
+    }, 50);
+  });
+  watcher.on("error", (error) => {
+    console.error("Failed to watch extension resources:", error);
+    process.exit(1);
+  });
   console.log("Watching for changes...");
 } else {
   await buildOnce();

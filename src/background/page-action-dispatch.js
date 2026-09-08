@@ -14,8 +14,11 @@ function responseError(response) {
 async function trySendPageAction(sendMessage, tabId, action) {
   try {
     return await sendMessage(tabId, pageActionMessage(action));
-  } catch {
-    return null;
+  } catch (error) {
+    if (/receiving end does not exist|could not establish connection/i.test(error?.message || "")) {
+      return null;
+    }
+    throw error;
   }
 }
 
@@ -35,21 +38,9 @@ export async function dispatchPageAction({
 
   await injectContentScript();
 
-  const injectedResponse = await trySendPageAction(sendMessage, tabId, action);
+  const injectedResponse = await sendMessage(tabId, pageActionMessage(action));
   if (injectedResponse?.ok) {
     return injectedResponse;
   }
-  if (injectedResponse?.ok === false) {
-    throw responseError(injectedResponse);
-  }
-
-  const legacyResponse = await sendMessage(tabId, {
-    action,
-    type: "page-action"
-  });
-  if (!legacyResponse?.ok) {
-    throw responseError(legacyResponse);
-  }
-
-  return legacyResponse;
+  throw responseError(injectedResponse);
 }

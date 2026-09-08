@@ -7,6 +7,17 @@ import {
 } from "../src/shared/api.js";
 
 describe("api helpers", () => {
+  test("extracts response text after reasoning items", () => {
+    expect(extractAssistantText({ output: [
+      { type: "reasoning", summary: [] },
+      { type: "message", content: [{ type: "output_text", text: '{"blocks":[]}' }] }
+    ] })).toBe('{"blocks":[]}');
+  });
+
+  test("reports truncation and refusal before trying to parse partial JSON", () => {
+    expect(() => extractAssistantText({ choices: [{ finish_reason: "length", message: { content: "{" } }] })).toThrow("truncated");
+    expect(() => extractAssistantText({ choices: [{ message: { refusal: "Cannot translate", content: null } }] })).toThrow("refused");
+  });
   test("builds a chat completions payload with image input", () => {
     const payload = buildChatCompletionsPayload({
       imageDataUrl: "data:image/png;base64,abc",

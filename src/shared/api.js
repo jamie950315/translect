@@ -90,6 +90,13 @@ export function buildChatCompletionsPayload({ imageDataUrl, model, targetLanguag
 }
 
 export function extractAssistantText(responseJson) {
+  const choice = responseJson?.choices?.[0];
+  if (choice?.finish_reason === "length" || responseJson?.status === "incomplete") {
+    throw new Error("The API response was truncated before translation completed.");
+  }
+  if (choice?.finish_reason === "content_filter" || choice?.message?.refusal) {
+    throw new Error("The model refused the translation request.");
+  }
   if (typeof responseJson?.output_text === "string") {
     return responseJson.output_text;
   }
@@ -113,11 +120,18 @@ export function extractAssistantText(responseJson) {
       .join("");
   }
 
-  const responsesContent = responseJson?.output?.[0]?.content;
-  if (Array.isArray(responsesContent)) {
-    return responsesContent
-      .map((part) => part?.text || part?.content || "")
+  if (Array.isArray(responseJson?.output)) {
+    const responsesContent = responseJson.output.flatMap((item) =>
+      Array.isArray(item?.content) ? item.content : []
+    );
+    if (responsesContent.some((part) => part?.type === "refusal")) {
+      throw new Error("The model refused the translation request.");
+    }
+    const text = responsesContent
+      .filter((part) => typeof part?.text === "string")
+      .map((part) => part.text)
       .join("");
+    if (text) return text;
   }
 
   throw new Error("The API response did not include assistant text.");
@@ -224,14 +238,18 @@ function normalizeBlock(block) {
 
 export function parseTranslationResponse(text) {
   const parsed = JSON.parse(findJsonSlice(text));
-  const blocks = Array.isArray(parsed?.blocks) ? parsed.blocks.map(normalizeBlock) : [];
-
-  return {
-    blocks: blocks.filter(
-      (block) =>
-        block.translatedText &&
-        block.bounds.width > 0 &&
-        block.bounds.height > 0
-    )
-  };
+  if (!Array.isArray(parsed?.blocks)) {
+    throw new Error("The translation response must include a blocks array.");
+  }
+  const blocks = parsed.blocks.map((rawBlock, index) => {
+    const block = normalizeBlock(rawBlock);
+    const validBounds = ["x", "y", "width", "height"].every(
+      (key) => typeof rawBlock?.bounds?.[key] === "number" && Number.isFinite(rawBlock.bounds[key])
+    );
+    if (!validBounds || !block.translatedText || block.bounds.width <= 0 || block.bounds.height <= 0) {
+      throw new Error(`Translation block ${index + 1} has missing text or invalid bounds.`);
+    }
+    return block;
+  });
+  return { blocks };
 }

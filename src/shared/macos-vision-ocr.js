@@ -1,4 +1,5 @@
 import { buildChatCompletionSamplingOptions } from "./api.js";
+import { readOcrTranslations, validateOcrResponse } from "./translation-response.js";
 
 function clampNumber(value, min, max, fallback) {
   const numeric = Number(value);
@@ -93,20 +94,8 @@ function groupVisionLines(lines) {
   return groups;
 }
 
-function parseTranslationJson(value) {
-  if (typeof value === "string") {
-    const start = value.indexOf("{");
-    const end = value.lastIndexOf("}");
-    if (start === -1 || end === -1 || end < start) {
-      throw new Error("The translation response did not contain JSON.");
-    }
-    return JSON.parse(value.slice(start, end + 1));
-  }
-
-  return value || {};
-}
-
 export function normalizeMacosVisionOcrResult(imageId, responseJson) {
+  validateOcrResponse(responseJson, "observations");
   const imageWidth = clampNumber(responseJson?.image_width ?? responseJson?.imageWidth, 1, 100000, 1);
   const imageHeight = clampNumber(responseJson?.image_height ?? responseJson?.imageHeight, 1, 100000, 1);
   const observations = Array.isArray(responseJson?.observations) ? responseJson.observations : [];
@@ -148,6 +137,7 @@ export function normalizeMacosVisionOcrResult(imageId, responseJson) {
 }
 
 export function normalizeAppleIntelligenceResult(imageId, responseJson) {
+  validateOcrResponse(responseJson, "observations");
   const imageWidth = clampNumber(
     responseJson?.image_width ?? responseJson?.imageWidth,
     1,
@@ -263,27 +253,16 @@ export function buildMacosVisionTextTranslationPayload({ model, ocrImages, targe
 }
 
 export function mergeMacosVisionTranslationResults(ocrImages, translationResponse) {
-  const parsed = parseTranslationJson(translationResponse);
-  const images = Array.isArray(parsed?.images) ? parsed.images : [];
-  const translatedByGroup = new Map();
-
-  for (const image of images) {
-    const groups = Array.isArray(image?.groups) ? image.groups : [];
-    for (const group of groups) {
-      const groupId = normalizeText(group?.group_id);
-      const translatedText = normalizeText(group?.translated_text);
-      if (groupId && translatedText) {
-        translatedByGroup.set(groupId, translatedText);
-      }
-    }
-  }
+  const translatedByGroup = readOcrTranslations(ocrImages, translationResponse, {
+    collection: "groups", idKey: "group_id", sourceId: (block) => block.flowGroupId || block.id
+  });
 
   return ocrImages.map((image) => ({
     imageId: image.imageId,
     translation: {
       blocks: image.blocks
         .map((block) => {
-          const flowText = translatedByGroup.get(block.flowGroupId || block.id) || "";
+          const flowText = translatedByGroup.get(block.flowGroupId || block.id);
           return {
             flowBoxIndex: block.flowBoxIndex,
             flowGroupId: block.flowGroupId,
@@ -297,7 +276,6 @@ export function mergeMacosVisionTranslationResults(ocrImages, translationRespons
             style: block.style
           };
         })
-        .filter((block) => block.flowText)
     }
   }));
 }

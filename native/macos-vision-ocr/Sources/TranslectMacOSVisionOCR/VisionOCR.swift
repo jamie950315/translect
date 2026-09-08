@@ -51,7 +51,6 @@ enum VisionOCRError: Error, CustomStringConvertible {
     case invalidImageDataUrl
     case invalidImageData
     case unsupportedImage
-    case visionFailed(String)
 
     var description: String {
         switch self {
@@ -61,8 +60,6 @@ enum VisionOCRError: Error, CustomStringConvertible {
             return "Invalid image data."
         case .unsupportedImage:
             return "Unsupported image format."
-        case .visionFailed(let message):
-            return "Vision OCR failed: \(message)"
         }
     }
 }
@@ -119,45 +116,7 @@ func recognizeText(request: VisionOCRRequest) throws -> VisionOCRResponse {
     let imageWidth = image.width
     let imageHeight = image.height
 
-    var recognizedObservations: [VisionOCRObservation] = []
-    var visionError: Error?
-
-    let textRequest = VNRecognizeTextRequest { request, error in
-        if let error {
-            visionError = error
-            return
-        }
-
-        let observations = request.results as? [VNRecognizedTextObservation] ?? []
-        recognizedObservations = observations.compactMap { observation in
-            guard let candidate = observation.topCandidates(1).first else {
-                return nil
-            }
-
-            let rect = pixelRect(
-                from: observation.boundingBox,
-                imageWidth: imageWidth,
-                imageHeight: imageHeight
-            )
-            let rotation = normalizedTextRotation(
-                topLeft: observation.topLeft,
-                topRight: observation.topRight,
-                imageWidth: imageWidth,
-                imageHeight: imageHeight
-            )
-
-            return VisionOCRObservation(
-                text: candidate.string,
-                confidence: candidate.confidence,
-                x: Double(rect.origin.x),
-                y: Double(rect.origin.y),
-                width: Double(rect.width),
-                height: Double(rect.height),
-                rotation: rotation
-            )
-        }
-    }
-
+    let textRequest = VNRecognizeTextRequest()
     textRequest.recognitionLevel = request.recognitionLevel == "fast" ? .fast : .accurate
     textRequest.usesLanguageCorrection = true
     textRequest.recognitionLanguages = request.languages ?? ["zh-Hant", "zh-Hans", "en-US"]
@@ -165,8 +124,32 @@ func recognizeText(request: VisionOCRRequest) throws -> VisionOCRResponse {
     let handler = VNImageRequestHandler(cgImage: image, options: [:])
     try handler.perform([textRequest])
 
-    if let visionError {
-        throw VisionOCRError.visionFailed(visionError.localizedDescription)
+    let recognizedObservations = (textRequest.results ?? []).compactMap { observation -> VisionOCRObservation? in
+        guard let candidate = observation.topCandidates(1).first else {
+            return nil
+        }
+
+        let rect = pixelRect(
+            from: observation.boundingBox,
+            imageWidth: imageWidth,
+            imageHeight: imageHeight
+        )
+        let rotation = normalizedTextRotation(
+            topLeft: observation.topLeft,
+            topRight: observation.topRight,
+            imageWidth: imageWidth,
+            imageHeight: imageHeight
+        )
+
+        return VisionOCRObservation(
+            text: candidate.string,
+            confidence: candidate.confidence,
+            x: Double(rect.origin.x),
+            y: Double(rect.origin.y),
+            width: Double(rect.width),
+            height: Double(rect.height),
+            rotation: rotation
+        )
     }
 
     return VisionOCRResponse(
@@ -180,24 +163,15 @@ func recognizeText(request: VisionOCRRequest) throws -> VisionOCRResponse {
 }
 
 func handleVisionOCRMessage(_ data: Data) -> VisionOCRResponse {
+    var requestID: String?
     do {
         let request = try JSONDecoder().decode(VisionOCRRequest.self, from: data)
-        do {
-            return try recognizeText(request: request)
-        } catch {
-            return VisionOCRResponse(
-                ok: false,
-                id: request.id,
-                image_width: nil,
-                image_height: nil,
-                observations: nil,
-                error: String(describing: error)
-            )
-        }
+        requestID = request.id
+        return try recognizeText(request: request)
     } catch {
         return VisionOCRResponse(
             ok: false,
-            id: nil,
+            id: requestID,
             image_width: nil,
             image_height: nil,
             observations: nil,

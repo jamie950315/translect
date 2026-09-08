@@ -15,6 +15,7 @@ The project supports four translation flows:
 
 - `src/manifest.json`: extension manifest, permissions, commands, popup, and content script registration.
 - `src/background/service-worker.js`: settings storage, tab capture, API calls, command handling, and translation routing.
+- `src/background/http-request.js`: bounded HTTP requests and original API error reporting; no automatic request-format downgrade.
 - `src/content/content-script.js`: page interaction, manual selection, auto image detection, overlay placement, rendering, and Reddit media reuse behavior.
 - `src/popup/popup.js`: popup settings form and action buttons.
 - `src/shared/api.js`: default vision-mode prompt, payload creation, assistant response parsing, and block normalization.
@@ -23,6 +24,7 @@ The project supports four translation flows:
 - `src/shared/flow-text.js`: distributes translated OCR text across provider-supplied line boxes.
 - `src/shared/render-utils.js`: text tokenization, wrapping, fitting, and typography grouping helpers.
 - `src/shared/settings.js`: settings normalization and validation.
+- `src/shared/translation-response.js`: shared OCR response and complete translation validation.
 - `src/shared/browser-compat.js`: aliases Safari's `browser` namespace for shared Chromium-style modules.
 - `src/shared/safari-manifest.js`: removes Safari-incompatible manifest fields during Safari packaging.
 - `scripts/build.mjs`: extension build script.
@@ -42,6 +44,7 @@ npm run build
 npm run build:safari
 npm run test:scenarios
 swift build --package-path native/macos-vision-ocr
+swift test --package-path native/macos-vision-ocr
 xcodebuild -project safari/Translect/Translect/Translect.xcodeproj -scheme Translect -configuration Debug CODE_SIGNING_ALLOWED=NO build
 ```
 
@@ -52,7 +55,7 @@ Before reporting work as complete:
 1. Run `npm test`.
 2. Run `npm run build`.
 3. Run `npm run test:scenarios` when behavior touches extension flow, image detection, overlays, settings, OCR, or translation routing.
-4. Run `swift build --package-path native/macos-vision-ocr` when behavior touches macOS Vision OCR.
+4. Run `swift test --package-path native/macos-vision-ocr` and `swift build --package-path native/macos-vision-ocr` when behavior touches the native host or local translation.
 5. Run `npm run build:safari` and the Safari Xcode build when behavior touches Safari packaging or the Safari native OCR bridge.
 6. Inspect failures and fix them before marking the task complete.
 
@@ -80,7 +83,20 @@ Before reporting work as complete:
 - Decoration-only Vision groups such as standalone arrows are not sent to Foundation Models and do not create overlays; this prevents an omitted symbol translation from failing the whole image.
 - Apple Intelligence groups are capped at 8 Vision lines and translated in batches of at most 32 groups or 6000 source bytes so dense images stay below the on-device model's 8192-token context limit.
 - Unchanged text, numeric-only rewrites, and ASCII-only metadata/code/other rewrites do not create overlays; this prevents rotated chart labels and OCR noise from being redrawn as oversized horizontal text.
-- Reddit translation cache version 2 intentionally ignores older cached overlays created before the Apple Intelligence rendering safeguards.
+- Reddit translation cache version 3 separates API origins/paths and case-sensitive model IDs, excludes URL credentials/query parameters, validates restored entries, and ignores older caches. Optional storage failures are logged and retain an in-page cache.
 - The Swift native messaging executable and Safari handler both recognize `apple-intelligence-translate` requests and return the same local translation response shape.
 - Every translated overlay has click-operated remove and visibility controls; the eye toggle dims only the translated canvas to 25% and keeps the controls available for restoring it.
 - Apple Vision OCR preserves horizontal and vertical reading direction. Vertical translations use the original axis-aligned OCR cover while rotating and fitting translated text inside the same detected frame.
+- Apple Intelligence failures remain local and are surfaced unchanged; there is no remote text fallback. Every generated batch must contain exactly one non-empty translation for each requested group.
+- Malformed, truncated, duplicate, and missing translation results are errors, not successful empty results. Explicit empty OCR/block arrays remain valid no-text results.
+- Translation/OCR HTTP requests have a 120-second deadline; image downloads have a 30-second deadline. Unsupported API response formats are reported without silently retrying a modified request.
+- Screenshot capture checks the requesting tab before and after capture. Failed image preparation releases its in-flight lock; failed translation is reported without a completion toast. Explicit retranslation bypasses prior successful fingerprints.
+- Automatic image scanning ignores extension-owned DOM changes to avoid self-triggered retry loops. All covers are drawn before any translated text so overlapping covers do not erase translations.
+- Native messaging validates complete frames, caps input at 64 MiB and output at the browser's 1 MiB limit, and exits with an explicit error for malformed framing.
+- `npm run dev` watches static resources as well as JavaScript. Invalid static resources stop the watcher visibly. Build/install scripts resolve the project relative to their own file, not the caller's directory.
+
+## Current Verification Boundary
+
+- Review regression coverage includes Chromium interaction/screenshot scenarios, network failure and manual recovery, overlapping covers, popup load failures, and native framing tests. Network scenarios use a local mock API; they do not establish remote model translation quality or real iOS OCR Server interoperability.
+- Real Apple Vision OCR works on the iMessage fixture. A real Foundation Models attempt returned an incomplete batch and was correctly rejected; successful on-device translation is not established by that run.
+- Safari can be built and signed with the current local developer identity. Repository builds do not replace `/Applications/Translect.app`; an installed Safari extension must be tested separately before claiming installed-app delivery.

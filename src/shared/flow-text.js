@@ -1,7 +1,7 @@
 import { tokenizeText } from "./render-utils.js";
 
 function shouldInsertSpace(previousText, nextToken) {
-  const previous = Array.from(previousText).at(-1) || "";
+  const previous = previousText.slice(-1);
   const cjkPattern = /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/u;
 
   return !cjkPattern.test(previous) && !cjkPattern.test(nextToken);

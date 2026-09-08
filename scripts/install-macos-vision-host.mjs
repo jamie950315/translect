@@ -3,10 +3,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const rootDir = process.cwd();
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageDir = path.join(rootDir, "native", "macos-vision-ocr");
 const hostName = "com.translect.ocr";
 
@@ -21,9 +22,13 @@ function readArg(name) {
 const extensionId = readArg("--extension-id");
 const browser = readArg("--browser") || "chrome";
 
-if (!extensionId) {
+if (!/^[a-p]{32}$/.test(extensionId)) {
   console.error("Usage: npm run install:macos-ocr-host -- --extension-id <chrome-extension-id> [--browser chrome|chromium|chrome-for-testing]");
   process.exit(1);
+}
+
+if (process.platform !== "darwin") {
+  throw new Error("The macOS Vision native host can only be installed on macOS.");
 }
 
 const manifestDirs = {

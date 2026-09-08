@@ -55,6 +55,8 @@ const uploadedSourceFixtures = [
 ];
 let activeUploadedAssetName = "";
 let mockImageRequests = [];
+let mockFailure = false;
+let mockRequestCount = 0;
 
 function contentTypeForPath(pathname) {
   if (pathname.endsWith(".js")) {
@@ -692,6 +694,12 @@ async function startFixtureServer() {
         }
 
         const bodyText = await readRequestBody(request);
+        mockRequestCount += 1;
+        if (mockFailure) {
+          response.writeHead(503, { ...corsHeaders, "Content-Type": "application/json" });
+          response.end(JSON.stringify({ error: { message: "Scenario service unavailable" } }));
+          return;
+        }
         const payload = JSON.parse(bodyText);
         const imageDataUrl = extractImageDataUrl(payload);
         const mockResponse = buildMockChatCompletion(imageDataUrl);
@@ -756,7 +764,7 @@ async function dispatchToActiveTab(serviceWorker, mode, action) {
     if (mode === "probe") {
       try {
         const response = await chrome.tabs.sendMessage(tab.id, {
-          type: "page-action",
+          type: "translect-page-action-v2",
           action
         });
         return { ok: true, response };
@@ -770,10 +778,10 @@ async function dispatchToActiveTab(serviceWorker, mode, action) {
 
     try {
       const response = await chrome.tabs.sendMessage(tab.id, {
-        type: "page-action",
+        type: "translect-page-action-v2",
         action
       });
-      return { ok: true, response };
+      return { ok: response?.ok === true, response };
     } catch (error) {
       return {
         ok: false,
@@ -998,9 +1006,10 @@ async function runSuite() {
           waitUntil: "domcontentloaded",
           timeout: 60000
         });
-        await page.waitForFunction(() => document.body.dataset.ready === "true", null, {
+        await page.waitForFunction(() => document.body.dataset.ready === "true" || document.body.dataset.error, null, {
           timeout: 10000
         });
+        assert.equal(await page.evaluate(() => document.body.dataset.error), undefined);
         const inkBounds = await page.locator(".translect-overlay canvas").evaluate((canvas) => {
           const context = canvas.getContext("2d");
           const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
@@ -1034,6 +1043,12 @@ async function runSuite() {
           path: path.join(outputDir, "vertical-provider-text-after.png")
         });
         summary.push({ scenario: "vertical_provider_text", inkBounds });
+        await page.goto(`${server.origin}/vertical-provider-text.html?overlap`, { waitUntil: "load" });
+        await page.waitForFunction(() => document.body.dataset.ready || document.body.dataset.error);
+        assert.equal(await page.evaluate(() => document.body.dataset.error), undefined);
+        assert.equal(await page.evaluate(() => document.body.dataset.lateCover), "false",
+          "Overlapping covers must be painted before any translated text");
+        summary.push({ scenario: "overlapping_covers_preserve_translated_text" });
       } finally {
         await browser.close();
       }
@@ -1264,6 +1279,26 @@ async function runSuite() {
       const outputName = `uploaded-${assetName.replace(/\.png$/u, "")}-after.png`;
       await page.screenshot({ path: path.join(outputDir, outputName), fullPage: true });
       summary.push({ scenario: `uploaded_fixture:${assetName}`, state });
+      await page.close();
+    }
+
+    if (!useLiveApi) {
+      mockFailure = true;
+      await setSettings(serviceWorker, server.origin, { alwaysAutoDetect: true });
+      const page = await openPage(context, `${server.origin}/direct-source.html`);
+      const failed = await waitForToast(page, "Scenario service unavailable", "http-error-visible");
+      assert.equal(failed.overlayCount, 0);
+      assert.ok(!failed.toastTexts.some((text) => text.includes("translation finished")));
+      const attempts = mockRequestCount;
+      await page.waitForTimeout(4000);
+      assert.equal(mockRequestCount, attempts, "Extension UI mutations must not retry failed requests");
+      mockFailure = false;
+      const retry = await dispatchToActiveTab(serviceWorker, "fire", PAGE_ACTIONS.AUTO_TRANSLATE_VISIBLE);
+      assert.equal(retry.ok, true, JSON.stringify(retry));
+      const recovered = await waitForOverlayCount(page, 1, "retry-after-http-error");
+      assertOverlayStyle(recovered, 1);
+      summary.push({ scenario: "visible_error_no_retry_loop_and_manual_recovery", attempts, state: recovered });
+      await page.screenshot({ path: path.join(outputDir, "error-recovery-after.png") });
       await page.close();
     }
 

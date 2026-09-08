@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import {
   dedupeImageElementsByVisualRect,
@@ -82,6 +82,13 @@ describe("auto translate image targeting", () => {
 });
 
 describe("visual image candidate dedupe", () => {
+  test("measures each candidate only once per deduplication pass", () => {
+    const images = Array.from({ length: 12 }, (_, index) => ({
+      getBoundingClientRect: vi.fn(() => ({ x: index * 400, y: 0, width: 300, height: 200 }))
+    }));
+    expect(dedupeImageElementsByVisualRect(images)).toEqual(images);
+    for (const image of images) expect(image.getBoundingClientRect).toHaveBeenCalledTimes(1);
+  });
   test("keeps one image when Reddit exposes duplicate image elements at the same position", () => {
     const primary = {
       getBoundingClientRect: () => ({

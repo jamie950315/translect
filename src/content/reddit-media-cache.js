@@ -1,4 +1,6 @@
-const STORAGE_KEY = "__translect_reddit_translation_cache_v2";
+import { translationSettingsKey } from "./translation-settings-key.js";
+
+const STORAGE_KEY = "__translect_reddit_translation_cache_v3";
 const MAX_ENTRIES = 36;
 const MAX_ASPECT_RATIO_DELTA = 0.08;
 
@@ -8,21 +10,6 @@ function normalizeUrl(value) {
   } catch {
     return null;
   }
-}
-
-function normalizeSettingsKey(settings = {}) {
-  const provider = settings.useAppleIntelligence
-    ? "apple-intelligence:local"
-    : settings.useMacosVisionOcr
-    ? `macos-vision:${String(settings.macosVisionHostName || "").trim().toLowerCase()}`
-    : settings.useIosOcrServer
-    ? `ios-ocr:${String(settings.iosOcrEndpoint || "").trim().toLowerCase()}`
-    : "vision";
-  return [
-    String(settings.targetLanguage || "").trim().toLowerCase(),
-    String(settings.model || "").trim().toLowerCase(),
-    provider
-  ].join("|");
 }
 
 function normalizeImageMetrics(metrics) {
@@ -76,7 +63,13 @@ export function extractRedditMediaKeyFromUrl(value) {
     return null;
   }
 
-  const filename = decodeURIComponent(url.pathname.split("/").filter(Boolean).at(-1) || "");
+  let filename;
+  try {
+    filename = decodeURIComponent(url.pathname.split("/").filter(Boolean).at(-1) || "");
+  } catch {
+    console.warn("Ignoring a Reddit image cache key with malformed URL encoding.");
+    return null;
+  }
   const basename = filename.replace(/\.(avif|gif|jpe?g|png|webp)$/i, "");
   return basename || null;
 }
@@ -101,19 +94,61 @@ export function buildRedditTranslationCacheKey({
       "reddit",
       resolvedPostId,
       mediaKey,
-      normalizeSettingsKey(settings)
+      translationSettingsKey(settings)
     ].join(":"),
     mediaKey,
     postId: resolvedPostId,
-    settingsKey: normalizeSettingsKey(settings)
+    settingsKey: translationSettingsKey(settings)
   };
+}
+
+function validCachedBlock(block) {
+  if (!block || typeof block.translatedText !== "string" ||
+      !block.bounds || !block.style || typeof block.style !== "object" || Array.isArray(block.style)) {
+    return false;
+  }
+  if (!["x", "y", "width", "height"].every((key) =>
+    Number.isFinite(block.bounds[key]) && block.bounds[key] >= 0 && block.bounds[key] <= 1000
+  ) || block.bounds.width <= 0 || block.bounds.height <= 0 ||
+      (block.bounds.rotation !== undefined && !Number.isFinite(block.bounds.rotation))) return false;
+  if (!["sourceText", "groupId", "flowGroupId", "flowText", "provider"].every((key) =>
+    block[key] === undefined || typeof block[key] === "string"
+  )) return false;
+  return ["textColor", "backgroundColor", "strokeColor"].every((key) =>
+    block.style[key] === undefined || (typeof block.style[key] === "string" &&
+      /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(block.style[key]))
+  ) && ["backgroundOpacity", "fontWeight", "strokeWidth"].every((key) =>
+    block.style[key] === undefined || Number.isFinite(block.style[key])
+  );
+}
+
+function validCachedEntry(entry) {
+  return entry && ["key", "postId", "mediaKey", "settingsKey"].every((key) =>
+    typeof entry[key] === "string" && entry[key].length > 0
+  ) && entry.key === ["reddit", entry.postId, entry.mediaKey, entry.settingsKey].join(":") &&
+    (entry.imageMetrics == null || normalizeImageMetrics(entry.imageMetrics) !== null) &&
+    Array.isArray(entry.translation?.blocks) && entry.translation.blocks.length > 0 &&
+    entry.translation.blocks.every(validCachedBlock);
 }
 
 function readEntries(storage) {
   try {
     const parsed = JSON.parse(storage.getItem(STORAGE_KEY) || "[]");
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) {
+      console.warn("Ignoring malformed Reddit translation cache data.");
+      return [];
+    }
+    const validEntries = parsed.filter(validCachedEntry);
+    if (validEntries.length !== parsed.length) {
+      console.warn("Ignoring malformed entries in the Reddit translation cache.");
+    }
+    return validEntries.slice(0, MAX_ENTRIES).map((entry) => ({
+      ...entry,
+      imageMetrics: normalizeImageMetrics(entry.imageMetrics)
+    }));
   } catch {
+    // Do not log exception messages or page-owned data, which can contain secrets.
+    console.warn("Could not read the Reddit translation cache; using an empty page cache.");
     return [];
   }
 }
@@ -122,15 +157,12 @@ function writeEntries(storage, entries) {
   try {
     storage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(0, MAX_ENTRIES)));
   } catch {
-    // Browsers can deny sessionStorage in strict privacy modes.
+    console.warn("Could not save the Reddit translation cache; keeping translations on this page only.");
   }
 }
 
 export function makeRedditTranslationCache(storage) {
-  let memoryEntries = readEntries(storage || {
-    getItem: () => null,
-    setItem: () => {}
-  });
+  let memoryEntries = storage ? readEntries(storage) : [];
 
   function persist() {
     if (storage) {
@@ -140,7 +172,7 @@ export function makeRedditTranslationCache(storage) {
 
   return {
     find({ imageMetrics, imageUrl, pageUrl, postId, settings }) {
-      const settingsKey = normalizeSettingsKey(settings);
+      const settingsKey = translationSettingsKey(settings);
       const mediaKey = extractRedditMediaKeyFromUrl(imageUrl);
       const resolvedPostId = postId || extractRedditPostIdFromUrl(pageUrl);
       const targetMetrics = normalizeImageMetrics(imageMetrics);

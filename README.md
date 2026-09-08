@@ -83,6 +83,12 @@ Safari uses the native code bundled in the Translect app. Chromium can use the s
 
 This mode requires macOS 26 or later, an Apple Intelligence-capable Mac, Apple Intelligence enabled in System Settings, and a downloaded on-device model. The popup reports whether the device is ineligible, Apple Intelligence is disabled, or the model is not ready. Existing remote modes remain available on older systems.
 
+Apple Intelligence errors, including rejected or incomplete translations, are reported directly. This mode never switches to a remote API automatically.
+
+### Error Reporting
+
+Remote translation endpoints must support the requested JSON response format. Unsupported formats, incomplete translations, and API failures are reported rather than silently retried with different settings. Remote translation and iOS OCR requests time out after 120 seconds; image downloads time out after 30 seconds. A failed image can be retried manually without reloading the page. Changing tabs while a screenshot is being taken cancels that capture.
+
 ## Settings
 
 The popup stores settings in Chromium extension storage:

@@ -2,6 +2,20 @@ import XCTest
 @testable import TranslectMacOSVisionOCR
 
 final class VisionOCRTests: XCTestCase {
+    func testRejectsDuplicateMissingUnexpectedAndEmptyTranslations() throws {
+        let groups = [AppleIntelligenceTextGroup(index: 4, observationIndexes: [0], text: "Hello")]
+        let valid = AppleIntelligenceGroupTranslation(groupIndex: 4, semanticLabel: "body", translatedText: "你好")
+        XCTAssertNoThrow(try validateAppleIntelligenceTranslations([valid], for: groups))
+        XCTAssertThrowsError(try validateAppleIntelligenceTranslations([valid, valid], for: groups))
+        XCTAssertThrowsError(try validateAppleIntelligenceTranslations([], for: groups))
+        XCTAssertThrowsError(try validateAppleIntelligenceTranslations([
+            AppleIntelligenceGroupTranslation(groupIndex: 5, semanticLabel: "body", translatedText: "你好")
+        ], for: groups))
+        XCTAssertThrowsError(try validateAppleIntelligenceTranslations([
+            AppleIntelligenceGroupTranslation(groupIndex: 4, semanticLabel: "body", translatedText: " \n")
+        ], for: groups))
+    }
+
     func testDetectsBothVerticalTextDirectionsFromVisionCorners() {
         XCTAssertEqual(
             normalizedTextRotation(

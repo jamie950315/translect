@@ -30,9 +30,7 @@ import {
   getSettingsValidationError,
   normalizeSettings
 } from "../shared/settings.js";
-import {
-  requestAppleIntelligenceWithTextFallback
-} from "./apple-intelligence-text-fallback.js";
+import { requestChatCompletion, requestJson } from "./http-request.js";
 import { createCaptureVisibleTabLimiter } from "./capture-rate-limit.js";
 import { dispatchPageAction } from "./page-action-dispatch.js";
 
@@ -89,17 +87,13 @@ async function getActiveTab() {
 
 async function injectCurrentContentScript(tab) {
   if (!tab?.id || !/^https?:|^file:/u.test(tab.url || "")) {
-    return;
+    throw new Error("Translect cannot run on this browser page. Open a webpage first.");
   }
 
-  try {
-    await chrome.scripting.executeScript({
-      files: ["content.js"],
-      target: { tabId: tab.id }
-    });
-  } catch (error) {
-    console.warn("Could not inject the current Translect content script.", error);
-  }
+  await chrome.scripting.executeScript({
+    files: ["content.js"],
+    target: { tabId: tab.id }
+  });
 }
 
 async function dispatchToActiveTab(action) {
@@ -110,72 +104,6 @@ async function dispatchToActiveTab(action) {
     sendMessage: chrome.tabs.sendMessage.bind(chrome.tabs),
     tabId: tab.id
   });
-}
-
-function buildRequestHeaders(apiKey) {
-  return {
-    "Authorization": `Bearer ${apiKey}`,
-    "Content-Type": "application/json"
-  };
-}
-
-async function parseJsonSafely(response) {
-  const text = await response.text();
-  try {
-    return {
-      json: JSON.parse(text),
-      rawText: text
-    };
-  } catch {
-    return {
-      json: null,
-      rawText: text
-    };
-  }
-}
-
-async function requestChatCompletion(apiEndpoint, apiKey, payload) {
-  let response = await fetch(apiEndpoint, {
-    method: "POST",
-    headers: buildRequestHeaders(apiKey),
-    body: JSON.stringify(payload)
-  });
-
-  if (!response.ok) {
-    const failed = await parseJsonSafely(response);
-    const errorText =
-      failed.json?.error?.message ||
-      failed.json?.error ||
-      failed.rawText ||
-      "The translation API request failed.";
-
-    if (
-      (response.status === 400 || response.status === 422) &&
-      /response_format/i.test(errorText)
-    ) {
-      const fallbackPayload = { ...payload };
-      delete fallbackPayload.response_format;
-      response = await fetch(apiEndpoint, {
-        method: "POST",
-        headers: buildRequestHeaders(apiKey),
-        body: JSON.stringify(fallbackPayload)
-      });
-    } else {
-      throw new Error(errorText);
-    }
-  }
-
-  if (!response.ok) {
-    const failed = await parseJsonSafely(response);
-    throw new Error(
-      failed.json?.error?.message ||
-        failed.json?.error ||
-        failed.rawText ||
-        "The translation API request failed."
-    );
-  }
-
-  return response.json();
 }
 
 function dataUrlToBlob(dataUrl) {
@@ -193,25 +121,13 @@ async function requestIosOcr(settings, request) {
   const formData = new FormData();
   formData.append("file", dataUrlToBlob(request.imageDataUrl), `${request.id}.png`);
 
-  const response = await fetch(settings.iosOcrEndpoint, {
+  const responseJson = await requestJson(settings.iosOcrEndpoint, {
     method: "POST",
     headers: {
       Accept: "application/json"
     },
     body: formData
-  });
-
-  if (!response.ok) {
-    const failed = await parseJsonSafely(response);
-    throw new Error(
-      failed.json?.message ||
-        failed.json?.error ||
-        failed.rawText ||
-        "The iOS OCR Server request failed."
-    );
-  }
-
-  const responseJson = await response.json();
+  }, "iOS OCR Server");
   if (responseJson?.success === false) {
     throw new Error(responseJson.message || "The iOS OCR Server could not read the image.");
   }
@@ -336,16 +252,7 @@ async function requestAppleIntelligenceTranslation(settings, request) {
 
 function requestAppleIntelligenceTranslations(settings, requests) {
   return Promise.all(
-    requests.map((request) =>
-      requestAppleIntelligenceWithTextFallback({
-        request,
-        requestAppleIntelligence: (appleRequest) =>
-          requestAppleIntelligenceTranslation(settings, appleRequest),
-        requestTextFallback: (fallbackRequests) =>
-          requestMacosVisionOcrTranslations(settings, fallbackRequests),
-        settings
-      })
-    )
+    requests.map((request) => requestAppleIntelligenceTranslation(settings, request))
   );
 }
 
@@ -417,10 +324,19 @@ async function requestTranslations(settings, requests) {
 }
 
 async function captureVisibleTab(sender) {
-  const windowId = sender?.tab?.windowId || (await getActiveTab()).windowId;
-  return scheduleVisibleTabCapture(() =>
-    chrome.tabs.captureVisibleTab(windowId, { format: "png" })
-  );
+  const tab = sender?.tab || await getActiveTab();
+  return scheduleVisibleTabCapture(async () => {
+    const ensureActive = async () => {
+      const [active] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
+      if (active?.id !== tab.id) {
+        throw new Error("The active tab changed. Return to the image tab and try again.");
+      }
+    };
+    await ensureActive();
+    const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+    await ensureActive();
+    return dataUrl;
+  });
 }
 
 function arrayBufferToBase64(arrayBuffer) {
@@ -444,7 +360,8 @@ async function fetchImageDataUrl(url) {
 
   const response = await fetch(url, {
     cache: "force-cache",
-    credentials: "omit"
+    credentials: "omit",
+    signal: AbortSignal.timeout(30_000)
   });
   if (!response.ok) {
     throw new Error(`Could not fetch image (${response.status}).`);

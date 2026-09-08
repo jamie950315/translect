@@ -62,7 +62,7 @@ export function wrapTextToWidth(text, maxWidth, measureFn) {
 }
 
 function shouldInsertSpace(previousText, nextToken) {
-  const previous = Array.from(previousText).at(-1) || "";
+  const previous = previousText.slice(-1);
   const cjkPattern = /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/u;
 
   return !cjkPattern.test(previous) && !cjkPattern.test(nextToken);
@@ -102,6 +102,10 @@ export function fitFontSize(text, box, options) {
         lineDelta,
         lines
       };
+      // Sizes descend, so the first exact match cannot be improved.
+      if (lineDelta === 0) {
+        break;
+      }
     }
   }
 

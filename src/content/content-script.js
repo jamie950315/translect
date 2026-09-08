@@ -36,6 +36,7 @@ import {
 import { canUseDirectImageSource, imageSourceUrl } from "./image-source.js";
 import { shouldReplaceOverlayRect } from "./overlay-dedupe.js";
 import { makeRedditTranslationCache } from "./reddit-media-cache.js";
+import { translationSettingsKey } from "./translation-settings-key.js";
 import {
   planTextLayouts,
   resolveReadableFontWeight,
@@ -75,9 +76,17 @@ const state = {
   visualInFlightFingerprints: new Set()
 };
 
-const redditTranslationCache = makeRedditTranslationCache(
-  typeof window !== "undefined" ? window.sessionStorage : null
-);
+function redditCacheStorage() {
+  if (!isRedditPage()) return null;
+  try {
+    return window.sessionStorage;
+  } catch (error) {
+    console.warn("Reddit translation caching is limited to this page because browser storage is unavailable.", error);
+    return null;
+  }
+}
+
+const redditTranslationCache = makeRedditTranslationCache(redditCacheStorage());
 
 function sendMessage(message) {
   return chrome.runtime.sendMessage(message);
@@ -334,24 +343,8 @@ function measureImageFingerprint(imageElement, settings) {
     imageElement.currentSrc || imageElement.src || "inline",
     Math.round(rect.width),
     Math.round(rect.height),
-    settings.targetLanguage,
-    settings.model,
-    translationProviderKey(settings)
+    translationSettingsKey(settings)
   ].join("|");
-}
-
-function translationProviderKey(settings) {
-  if (settings.useAppleIntelligence) {
-    return "apple-intelligence:local";
-  }
-
-  if (settings.useMacosVisionOcr) {
-    return `macos-vision:${settings.macosVisionHostName || ""}`;
-  }
-
-  return settings.useIosOcrServer
-    ? `ios-ocr:${settings.iosOcrEndpoint || ""}`
-    : "vision";
 }
 
 function measureImageVisualFingerprint(imageElement, settings) {
@@ -368,9 +361,7 @@ function measureImageVisualFingerprint(imageElement, settings) {
     Math.round(rect.y / 6),
     Math.round(rect.width / 6),
     Math.round(rect.height / 6),
-    settings.targetLanguage,
-    settings.model,
-    translationProviderKey(settings)
+    translationSettingsKey(settings)
   ].join("|");
 }
 
@@ -715,17 +706,14 @@ async function fetchImageSourceDataUrl(imageElement) {
     return null;
   }
 
-  let response;
-  try {
-    response = await sendMessage({
-      type: MESSAGE_TYPES.FETCH_IMAGE_DATA,
-      url: imageSourceUrl(imageElement)
-    });
-  } catch {
-    return null;
-  }
+  const response = await sendMessage({
+    type: MESSAGE_TYPES.FETCH_IMAGE_DATA,
+    url: imageSourceUrl(imageElement)
+  });
 
   if (!response?.ok || !response.dataUrl) {
+    console.warn("Could not fetch the original image; using a screenshot.",
+      response?.error || "Image data is missing from the response.");
     return null;
   }
 
@@ -771,7 +759,14 @@ async function requestTranslationBatch(imageRequests) {
     throw new Error(response?.error || "Translation failed.");
   }
 
-  return Array.isArray(response.translations) ? response.translations : [];
+  const translations = response.translations;
+  const requestedIds = new Set(imageRequests.map((item) => item.id));
+  if (!Array.isArray(translations) || translations.length !== requestedIds.size ||
+      translations.some((item) => !item || !requestedIds.delete(item.id) ||
+        !Array.isArray(item.translation?.blocks))) {
+    throw new Error("The image translation batch returned missing or invalid results.");
+  }
+  return translations;
 }
 
 function sampleRegionColor(sourceCtx, rect) {
@@ -1558,8 +1553,8 @@ async function renderTranslatedCanvas(imageDataUrl, translation) {
     }
   );
 
-  for (const [index, { block, coverRect, rect, resolvedStyle }] of renderBlocks.entries()) {
-    const layout = textLayouts[index];
+  // Paint every cover first so overlapping covers never erase translated text.
+  for (const { block, coverRect, rect, resolvedStyle } of renderBlocks) {
     const providerCoverRect = coverRect || rect;
 
     outputCtx.save();
@@ -1609,7 +1604,10 @@ async function renderTranslatedCanvas(imageDataUrl, translation) {
       );
     }
     outputCtx.restore();
+  }
 
+  for (const [index, { block, rect, resolvedStyle }] of renderBlocks.entries()) {
+    const layout = textLayouts[index];
     outputCtx.save();
     outputCtx.translate(rect.x + rect.width / 2, rect.y + rect.height / 2);
     outputCtx.rotate((rect.rotation * Math.PI) / 180);
@@ -1661,8 +1659,8 @@ async function translateImageElement(imageElement, options = {}) {
   const emptyRecord = state.emptyTranslationFingerprints.get(imageElement);
 
   if (
-    state.translatedVisualFingerprints.has(visualFingerprint) ||
-    (!options.force && state.translatedFingerprints.get(imageElement) === fingerprint)
+    !options.force && (state.translatedVisualFingerprints.has(visualFingerprint) ||
+      state.translatedFingerprints.get(imageElement) === fingerprint)
   ) {
     return;
   }
@@ -1750,8 +1748,8 @@ async function prepareImageBatchJob(imageElement, settings, snapshot, force) {
   const emptyRecord = state.emptyTranslationFingerprints.get(imageElement);
 
   if (
-    state.translatedVisualFingerprints.has(visualFingerprint) ||
-    (!force && state.translatedFingerprints.get(imageElement) === fingerprint)
+    !force && (state.translatedVisualFingerprints.has(visualFingerprint) ||
+      state.translatedFingerprints.get(imageElement) === fingerprint)
   ) {
     return null;
   }
@@ -1794,7 +1792,14 @@ async function prepareImageBatchJob(imageElement, settings, snapshot, force) {
 
   state.inFlightElements.add(imageElement);
   state.visualInFlightFingerprints.add(visualFingerprint);
-  const crop = await imageDataForElement(imageElement, snapshot);
+  let crop;
+  try {
+    crop = await imageDataForElement(imageElement, snapshot);
+  } catch (error) {
+    state.inFlightElements.delete(imageElement);
+    state.visualInFlightFingerprints.delete(visualFingerprint);
+    throw error;
+  }
 
   return {
     crop,
@@ -1836,6 +1841,7 @@ async function finishImageBatchJob(job, settings, translation) {
 
 async function translateVisibleImagesWithIosOcr(images, settings, snapshot, force) {
   const jobs = [];
+  const errors = [];
 
   for (const image of images) {
     try {
@@ -1844,7 +1850,8 @@ async function translateVisibleImagesWithIosOcr(images, settings, snapshot, forc
         jobs.push(job);
       }
     } catch (error) {
-      console.warn("Image preparation failed for one image.", error);
+      errors.push(error);
+      showToast(`Image preparation failed: ${error.message || String(error)}`);
     }
   }
 
@@ -1861,15 +1868,24 @@ async function translateVisibleImagesWithIosOcr(images, settings, snapshot, forc
       );
 
       for (const job of chunk) {
-        await finishImageBatchJob(job, settings, translationById.get(job.id));
+        try {
+          await finishImageBatchJob(job, settings, translationById.get(job.id));
+        } catch (error) {
+          errors.push(error);
+          showToast(`Image translation failed: ${error.message || String(error)}`);
+        }
       }
     } catch (error) {
-      console.warn("iOS OCR batch translation failed.", error);
+      errors.push(error);
+      showToast(`Image translation failed: ${error.message || String(error)}`);
     } finally {
       for (const job of chunk) {
         releaseImageBatchJob(job);
       }
     }
+  }
+  if (errors.length) {
+    throw new AggregateError(errors, `Visible image translation failed: ${errors[0].message || String(errors[0])}`);
   }
 }
 
@@ -1964,14 +1980,19 @@ async function translateVisibleImages(force = false) {
     return;
   }
 
+  const errors = [];
   for (const image of images) {
     try {
       await translateImageElement(image, { force });
     } catch (error) {
-      console.warn("Image translation failed for one image.", error);
+      errors.push(error);
+      showToast(`Image translation failed: ${error.message || String(error)}`);
     }
   }
 
+  if (errors.length) {
+    throw new AggregateError(errors, `Visible image translation failed: ${errors[0].message || String(errors[0])}`);
+  }
   showToast("Visible image translation finished.");
   } finally {
     state.visibleTranslationInFlight = false;
@@ -2140,7 +2161,10 @@ async function getSettings() {
   }
 
   const response = await sendMessage({ type: MESSAGE_TYPES.GET_SETTINGS });
-  state.settings = normalizeSettings(response?.settings || {});
+  if (!response?.ok || !response.settings) {
+    throw new Error(response?.error || "Could not load Translect settings.");
+  }
+  state.settings = normalizeSettings(response.settings);
   return state.settings;
 }
 
@@ -2186,12 +2210,23 @@ function scheduleRedditReuseScan() {
   }, 350);
 }
 
+function hasPageMutations(records) {
+  return records.some((record) => {
+    if (record.target.closest?.(`#${ROOT_ID}`)) return false;
+    return [...record.addedNodes, ...record.removedNodes].some((node) =>
+      node.id !== ROOT_ID && node.id !== STYLE_ID
+    );
+  });
+}
+
 function startRedditReuseObserver() {
   if (!isRedditPage() || state.redditReuseMutationObserver) {
     return;
   }
 
-  state.redditReuseMutationObserver = new MutationObserver(scheduleRedditReuseScan);
+  state.redditReuseMutationObserver = new MutationObserver((records) => {
+    if (hasPageMutations(records)) scheduleRedditReuseScan();
+  });
   state.redditReuseMutationObserver.observe(document.documentElement, {
     childList: true,
     subtree: true
@@ -2213,7 +2248,9 @@ async function applySettings() {
 
   if (settings.alwaysAutoDetect) {
     if (!state.autoMutationObserver) {
-      state.autoMutationObserver = new MutationObserver(scheduleAutoScan);
+      state.autoMutationObserver = new MutationObserver((records) => {
+        if (hasPageMutations(records)) scheduleAutoScan();
+      });
       state.autoMutationObserver.observe(document.documentElement, {
         childList: true,
         subtree: true

@@ -31,35 +31,34 @@ export function isAutoTranslateCandidate({
   );
 }
 
-function imageArea(imageElement) {
-  const rect = imageElement.getBoundingClientRect();
-  return Math.max(0, Number(rect.width) || 0) * Math.max(0, Number(rect.height) || 0);
-}
-
 function imageResolution(imageElement) {
   return (Number(imageElement.naturalWidth) || 0) * (Number(imageElement.naturalHeight) || 0);
 }
 
 export function dedupeImageElementsByVisualRect(imageElements) {
-  const sorted = [...imageElements].sort((a, b) => {
-    const areaDelta = imageArea(b) - imageArea(a);
+  const measured = imageElements.map((imageElement) => {
+    const rect = imageElement.getBoundingClientRect();
+    return { imageElement, rect, area: Math.max(0, Number(rect.width) || 0) * Math.max(0, Number(rect.height) || 0) };
+  });
+  const sorted = measured.sort((a, b) => {
+    const areaDelta = b.area - a.area;
     if (Math.abs(areaDelta) > 1) {
       return areaDelta;
     }
-    return imageResolution(b) - imageResolution(a);
+    return imageResolution(b.imageElement) - imageResolution(a.imageElement);
   });
   const kept = [];
 
-  for (const imageElement of sorted) {
-    const rect = imageElement.getBoundingClientRect();
+  for (const candidate of sorted) {
     const isDuplicate = kept.some((keptImage) =>
-      shouldReplaceOverlayRect(keptImage.getBoundingClientRect(), rect)
+      shouldReplaceOverlayRect(keptImage.rect, candidate.rect)
     );
 
     if (!isDuplicate) {
-      kept.push(imageElement);
+      kept.push(candidate);
     }
   }
 
-  return imageElements.filter((imageElement) => kept.includes(imageElement));
+  const keptElements = new Set(kept.map(({ imageElement }) => imageElement));
+  return imageElements.filter((imageElement) => keptElements.has(imageElement));
 }

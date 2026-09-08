@@ -1,4 +1,5 @@
 import { buildChatCompletionSamplingOptions } from "./api.js";
+import { readOcrTranslations, validateOcrResponse } from "./translation-response.js";
 
 function clampNumber(value, min, max, fallback) {
   const numeric = Number(value);
@@ -165,6 +166,7 @@ function groupOcrLines(lines) {
 }
 
 export function normalizeIosOcrResult(imageId, responseJson) {
+  validateOcrResponse(responseJson, "ocr_boxes");
   const imageWidth = clampNumber(responseJson?.image_width, 1, 100000, 1);
   const imageHeight = clampNumber(responseJson?.image_height, 1, 100000, 1);
   const ocrBoxes = Array.isArray(responseJson?.ocr_boxes) ? responseJson.ocr_boxes : [];
@@ -240,34 +242,10 @@ export function buildTextTranslationPayload({ model, ocrImages, targetLanguage }
   };
 }
 
-function parseTranslationJson(value) {
-  if (typeof value === "string") {
-    const start = value.indexOf("{");
-    const end = value.lastIndexOf("}");
-    if (start === -1 || end === -1 || end < start) {
-      throw new Error("The translation response did not contain JSON.");
-    }
-    return JSON.parse(value.slice(start, end + 1));
-  }
-
-  return value || {};
-}
-
 export function mergeOcrAndTranslationResults(ocrImages, translationResponse) {
-  const parsed = parseTranslationJson(translationResponse);
-  const images = Array.isArray(parsed?.images) ? parsed.images : [];
-  const translatedByBox = new Map();
-
-  for (const image of images) {
-    const blocks = Array.isArray(image?.blocks) ? image.blocks : [];
-    for (const block of blocks) {
-      const boxId = normalizeText(block?.box_id);
-      const translatedText = normalizeText(block?.translated_text);
-      if (boxId && translatedText) {
-        translatedByBox.set(boxId, translatedText);
-      }
-    }
-  }
+  const translatedByBox = readOcrTranslations(ocrImages, translationResponse, {
+    collection: "blocks", idKey: "box_id", sourceId: (block) => block.id
+  });
 
   return ocrImages.map((image) => ({
     imageId: image.imageId,
@@ -278,11 +256,10 @@ export function mergeOcrAndTranslationResults(ocrImages, translationResponse) {
           provider: block.provider,
           sourceLineCount: block.sourceLineCount,
           sourceText: block.sourceText,
-          translatedText: translatedByBox.get(block.id) || "",
+          translatedText: translatedByBox.get(block.id),
           bounds: block.bounds,
           style: block.style
         }))
-        .filter((block) => block.translatedText)
     }
   }));
 }

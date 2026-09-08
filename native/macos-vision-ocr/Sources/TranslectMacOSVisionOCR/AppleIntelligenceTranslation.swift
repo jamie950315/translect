@@ -65,10 +65,21 @@ enum AppleIntelligenceTranslationError: Error, CustomStringConvertible {
         case .unavailable(let reason):
             return reason
         case .incompleteResponse:
-            return "Apple Intelligence did not return a translation for every text group."
+            return "Apple Intelligence must return exactly one non-empty translation for every requested text group."
         case .invalidTargetLanguage:
             return "Target language is required."
         }
+    }
+}
+
+func validateAppleIntelligenceTranslations(
+    _ translations: [AppleIntelligenceGroupTranslation],
+    for groups: [AppleIntelligenceTextGroup]
+) throws {
+    guard translations.count == groups.count,
+          translations.allSatisfy({ !$0.translatedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
+          Set(translations.map(\.groupIndex)) == Set(groups.map(\.index)) else {
+        throw AppleIntelligenceTranslationError.incompleteResponse
     }
 }
 
@@ -351,23 +362,15 @@ private func translateWithAppleIntelligence(
             generating: GeneratedAppleIntelligenceTranslationBatch.self,
             options: GenerationOptions(sampling: .greedy)
         )
-        translations.append(contentsOf: response.content.groups.map {
+        let batchTranslations = response.content.groups.map {
             AppleIntelligenceGroupTranslation(
                 groupIndex: $0.groupIndex,
                 semanticLabel: $0.semanticLabel,
                 translatedText: $0.translatedText.trimmingCharacters(in: .whitespacesAndNewlines)
             )
-        })
-    }
-
-    let translatedIndexes = Set(
-        translations
-            .filter { !$0.translatedText.isEmpty }
-            .map(\.groupIndex)
-    )
-    let expectedIndexes = Set(groups.map(\.index))
-    guard translatedIndexes == expectedIndexes else {
-        throw AppleIntelligenceTranslationError.incompleteResponse
+        }
+        try validateAppleIntelligenceTranslations(batchTranslations, for: batch)
+        translations.append(contentsOf: batchTranslations)
     }
 
     return translations

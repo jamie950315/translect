@@ -1,5 +1,5 @@
 import { installWebExtensionApiCompatibility } from "../shared/browser-compat.js";
-import { DEFAULT_SETTINGS, MESSAGE_TYPES, PAGE_ACTIONS } from "../shared/defaults.js";
+import { MESSAGE_TYPES, PAGE_ACTIONS } from "../shared/defaults.js";
 import { denormalizeSettings, normalizeSettings } from "../shared/settings.js";
 
 installWebExtensionApiCompatibility();
@@ -104,10 +104,7 @@ async function saveSettings(message = "Settings saved.") {
   }
 
   showStatus(message);
-  await sendMessage({
-    type: MESSAGE_TYPES.DISPATCH_ACTIVE_TAB,
-    action: PAGE_ACTIONS.SETTINGS_UPDATED
-  });
+  await runPageAction(PAGE_ACTIONS.SETTINGS_UPDATED);
 }
 
 async function pasteApiKeyFromClipboard() {
@@ -117,12 +114,7 @@ async function pasteApiKeyFromClipboard() {
     throw new Error("Clipboard paste is not available in this popup.");
   }
 
-  let text = "";
-  try {
-    text = await navigator.clipboard.readText();
-  } catch {
-    throw new Error("Clipboard permission is blocked. Reload the extension after rebuilding.");
-  }
+  const text = await navigator.clipboard.readText();
 
   if (!text.trim()) {
     throw new Error("Clipboard is empty.");
@@ -146,13 +138,22 @@ async function runPageAction(action) {
 
 async function initShortcutText() {
   const response = await sendMessage({ type: MESSAGE_TYPES.GET_COMMANDS });
+  if (!response?.ok || !Array.isArray(response.commands)) {
+    throw new Error(response?.error || "Could not load keyboard shortcuts.");
+  }
   const activeCommand = response?.commands?.find((command) => command.name === "activate-translation");
   elements.shortcutText.textContent = activeCommand?.shortcut || "Not assigned";
 }
 
 async function initialize() {
   const response = await sendMessage({ type: MESSAGE_TYPES.GET_SETTINGS });
-  fillForm(normalizeSettings(response?.settings || DEFAULT_SETTINGS));
+  if (!response?.ok || !response.settings || typeof response.settings !== "object") {
+    throw new Error(response?.error || "Could not load saved settings.");
+  }
+  fillForm(normalizeSettings(response.settings));
+  for (const button of [elements.saveButton, elements.manualButton, elements.autoButton]) {
+    button.disabled = false;
+  }
   elements.extensionIdText.textContent = chrome.runtime.id;
   await initShortcutText();
 }
@@ -219,6 +220,10 @@ elements.clearButton.addEventListener("click", async () => {
     showStatus(error.message, true);
   }
 });
+
+for (const button of [elements.saveButton, elements.manualButton, elements.autoButton]) {
+  button.disabled = true;
+}
 
 initialize().catch((error) => {
   showStatus(error.message, true);
