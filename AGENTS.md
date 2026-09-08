@@ -19,7 +19,7 @@ The project supports four translation flows:
 - `src/background/retained-settings.js`: serialized Safari Keychain restoration/migration/save and browser cache synchronization.
 - `src/content/content-script.js`: page interaction, manual selection, auto image detection, overlay placement, rendering, and Reddit media reuse behavior.
 - `src/popup/popup.js`: popup settings form and action buttons.
-- `src/popup/vendor/puppertino/`: locally bundled MIT Puppertino CSS modules and license, pinned to upstream commit `30a21ae7052b460097d153d488a0023059236a6a`.
+- `src/popup/popup.css`: self-contained macOS material/control styles calibrated against native AppKit controls and Tahoe Control Center/Safari references.
 - `src/shared/api.js`: default vision-mode prompt, payload creation, assistant response parsing, and block normalization.
 - `src/shared/ios-ocr.js`: iOS OCR response normalization, text-only translation payloads, and merge logic.
 - `src/shared/macos-vision-ocr.js`: macOS Vision native host response normalization.
@@ -46,6 +46,9 @@ npm test
 npm run build
 npm run build:safari
 npm run test:scenarios
+# Optional: verify popup/vertical text with isolated WebKit instead of Chromium.
+PLAYWRIGHT_SKIP_BROWSER_GC=1 npx playwright install webkit
+TRANSLECT_POPUP_ENGINE=webkit npm run test:scenarios
 swift build --package-path native/macos-vision-ocr
 swift test --package-path native/macos-vision-ocr
 xcodebuild -project safari/Translect/Translect/Translect.xcodeproj -scheme Translect -configuration Debug CODE_SIGNING_ALLOWED=NO build
@@ -104,15 +107,15 @@ Before reporting work as complete:
 - Automatic image scanning ignores extension-owned DOM changes to avoid self-triggered retry loops. All covers are drawn before any translated text so overlapping covers do not erase translations.
 - Native messaging validates complete frames, caps input at 64 MiB and output at the browser's 1 MiB limit, and exits with an explicit error for malformed framing.
 - `npm run dev` watches static resources as well as JavaScript. Invalid static resources stop the watcher visibly. Build/install scripts resolve the project relative to their own file, not the caller's directory.
-- Content scripts read settings directly from extension storage, avoiding a nested background-message round-trip during page-action handling. The popup uses a 390x590 macOS-style layout with Translate/Settings tabs, independently scrolling content, and a persistent save/status/footer area.
-- Popup buttons, form controls, radio choices, switches, and segmented navigation use locally bundled Puppertino CSS with compact macOS overrides, system fonts, light/dark colors, keyboard focus, and reduced-motion/transparency support. The switch override keeps its native input keyboard-accessible. There are no runtime framework dependencies, CDN styles, downloaded fonts, or refraction shaders.
-- The four translation methods are now one radio group; their stored boolean fields and Keychain schema are unchanged. The selection button always starts manual selection; `triggerUsesAutoMode` controls the keyboard shortcut. Busy actions disable repeat submissions and preserve visible error messages.
-- Page controls, toasts and manual-selection chrome use scoped neutral glass-like surfaces and system typography. Translation positioning and rendering geometry are unchanged. These web surfaces follow Apple's material guidance; they are not Apple's native Liquid Glass implementation.
+- Content scripts read settings directly from extension storage, avoiding a nested background-message round-trip during page-action handling. The 360x440 popup groups translation actions into Control Center-style tiles beneath a compact toolbar. Content scrolls independently of status/save controls; the less-used shortcut preference lives in Settings.
+- Popup styling is self-contained rather than driven by Puppertino. It uses system typography, restrained top-edge highlights, shared translucent surfaces, native select menus, blue switches, and visible keyboard focus. Light/dark, reduced-motion/transparency and increased-contrast preferences are supported. No runtime framework, CDN, downloaded font, image-text control, refraction shader, or continuous idle animation is used.
+- One native method selector maps to the same three stored provider booleans, preserving the Keychain schema and hidden API credentials. The selection button always starts manual selection; `triggerUsesAutoMode` controls the keyboard shortcut. Busy actions prevent duplicate submissions and do not erase errors.
+- Page controls/toasts use shared neutral material; translated images have no extra decorative outline. Translation placement/geometry, hit targets and 25% eye toggle are unchanged. Native AppKit renders and the real Tahoe screenshot library are visual references, not pasted UI assets or proof of native Liquid Glass compositing.
 - Verification builds may be registered automatically by macOS. Inspect `pluginkit -m -A -D -v -i com.translect.safari.Extension` and unregister exact build-copy paths before installed-app tests, keeping `/Applications/Translect.app`. Multiple registered build copies can expose stale Safari extension contexts. Retain recoverable app backups before replacement, verify signing, and restart Safari after an app update.
 
 ## Current Verification Boundary
 
-- The Apple-style UI is installed in `/Applications/Translect.app` and was checked in native Safari for system-dark appearance, keyboard tab switching, method/settings fields, and retained-settings loading without changing stored credentials. Automated popup scenarios cover light/dark/reduced-motion modes, all provider choices, hidden-key preservation, scrolling, and errors. Existing image/overlay scenarios still run with the new page chrome.
+- The current native-material redesign is signed and installed in `/Applications/Translect.app`, with the previous app preserved in `.tmp/Translect-before-native-macos-redesign.app`. Latest native Safari visual verification was blocked by repeated CUA timeouts; do not reuse the preceding design's native screenshot as evidence for this revision. Isolated Chromium/WebKit popup tests cover appearance, keyboard navigation, all method mappings, hidden-key preservation, scrolling and errors; the remaining extension/image scenarios run in Chromium. No live model API calls or settings changes are part of this visual verification.
 
 - Retention is installed in `/Applications/Translect.app`. Verification included moving the app out of Applications, confirming the Keychain item survived, reinstalling/restarting Safari, and observing the retained model/provider settings and retention notice. Browser-profile deletion was not performed; empty-cache recovery and concurrent migration are regression-tested. Real Keychain round trips use an isolated UUID test item, never production credentials.
 - Run `TRANSLECT_TEST_KEYCHAIN=1 swift test --package-path native/macos-vision-ocr --filter PersistentSettingsTests` for the isolated real-Keychain test. It removes only its own temporary UUID item. Normal Swift tests skip this and the opt-in model integration test.

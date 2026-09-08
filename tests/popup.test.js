@@ -54,16 +54,29 @@ test("tabs support arrow-key navigation without changing settings", async () => 
 test("provider choices are mutually exclusive and preserve hidden credentials", async () => {
   const e = await loadPopup(async ({ type }) => type === MESSAGE_TYPES.GET_SETTINGS
     ? { ok: true, settings: { apiKey: "stored-key" }, settingsRetainedOnMac: true } : { ok: true, commands: [] });
-  e.get("useAppleIntelligence").checked = true;
-  e.get("useAppleIntelligence").listeners.change();
+  e.get("providerSelect").value = "apple";
+  e.get("providerSelect").listeners.change();
   expect(e.get("remoteApiSettings").hidden).toBe(true);
-  expect(e.get("useApiVision").checked).toBe(false);
-  e.get("useIosOcrServer").checked = true;
-  e.get("useIosOcrServer").listeners.change();
-  expect(e.get("useAppleIntelligence").checked).toBe(false);
+  e.get("providerSelect").value = "ios";
+  e.get("providerSelect").listeners.change();
+  expect(e.get("providerSelect").value).toBe("ios");
   expect(e.get("iosOcrSettings").hidden).toBe(false);
   expect(e.get("apiKey").value).toBe("stored-key");
   expect(e.get("storageLabel").textContent).toBe("On this Mac");
+});
+
+test.each(["api", "apple", "macos", "ios"])("native method picker preserves the stored flags for %s", async (method) => {
+  const send = vi.fn(async ({ type }) => {
+    if (type === MESSAGE_TYPES.GET_SETTINGS) return { ok: true, settings: { apiKey: "stored-key" } };
+    if (type === MESSAGE_TYPES.GET_COMMANDS) return { ok: true, commands: [] };
+    return { ok: true };
+  });
+  const e = await loadPopup(send);
+  e.get("providerSelect").value = method;
+  e.get("providerSelect").listeners.change();
+  await e.get("saveButton").listeners.click();
+  const saved = send.mock.calls.find(([m]) => m.type === MESSAGE_TYPES.SAVE_SETTINGS)[0].settings;
+  expect(saved).toMatchObject({ apiKey: "stored-key", useAppleIntelligence: method === "apple", useMacosVisionOcr: method === "macos", useIosOcrServer: method === "ios" });
 });
 
 test("selection button stays manual even when the shortcut uses auto mode", async () => {

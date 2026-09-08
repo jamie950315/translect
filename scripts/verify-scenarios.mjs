@@ -4,7 +4,10 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
-import { chromium } from "playwright";
+import { chromium, webkit } from "playwright";
+
+const popupEngine = process.env.TRANSLECT_POPUP_ENGINE || "chromium";
+if (!["chromium", "webkit"].includes(popupEngine)) throw new Error("TRANSLECT_POPUP_ENGINE must be chromium or webkit.");
 
 const useLiveApi = process.env.TRANSLECT_SCENARIO_MODE === "live";
 const apiKey = process.env.OPENAI_API_KEY || "";
@@ -839,6 +842,7 @@ async function pageState(page) {
           boxShadow: style.boxShadow,
           height: Math.round(rect.height),
           outline: style.outlineColor,
+          outlineStyle: style.outlineStyle,
           width: Math.round(rect.width)
         };
       }),
@@ -941,7 +945,7 @@ function assertOverlayStyle(state, expectedCount) {
   for (const overlay of state.overlayStyles) {
     assert.equal(overlay.background, "rgba(0, 0, 0, 0)");
     assert.equal(overlay.boxShadow, "none");
-    assert.equal(overlay.outline, "rgba(0, 0, 0, 0.12)");
+    assert.equal(overlay.outlineStyle, "none");
   }
 }
 
@@ -1000,7 +1004,7 @@ async function runSuite() {
     const summary = [];
 
     {
-      const browser = await chromium.launch({ headless: true });
+      const browser = await ({ chromium, webkit }[popupEngine]).launch({ headless: true });
       try {
         const page = await browser.newPage({ viewport: { width: 520, height: 420 } });
         await page.goto(`${server.origin}/vertical-provider-text.html`, {
@@ -1050,7 +1054,7 @@ async function runSuite() {
         assert.equal(await page.evaluate(() => document.body.dataset.lateCover), "false",
           "Overlapping covers must be painted before any translated text");
         summary.push({ scenario: "overlapping_covers_preserve_translated_text" });
-        const popup = await browser.newPage({ viewport: { width: 390, height: 590 } });
+        const popup = await browser.newPage({ viewport: { width: 360, height: 440 } });
         const popupErrors = [];
         popup.on("pageerror", (error) => popupErrors.push(error.message));
         await popup.addInitScript(() => {
@@ -1068,37 +1072,37 @@ async function runSuite() {
         await popup.goto(`${server.origin}/dist/popup/popup.html`);
         await popup.locator("#saveButton:enabled").waitFor();
         assert.equal(await popup.locator(".shell").evaluate((node) => getComputedStyle(node).display), "flex", "Popup styles must load");
-        await popup.screenshot({ path: path.join(outputDir, "popup-translate-light.png") });
+        await popup.screenshot({ path: path.join(outputDir, `popup-translate-light-${popupEngine}.png`) });
         await popup.getByRole("tab", { name: "Translate", exact: true }).focus();
         await popup.keyboard.press("ArrowRight");
         assert.equal(await popup.locator("#settingsPanel").isVisible(), true);
-        await popup.screenshot({ path: path.join(outputDir, "popup-settings-light.png") });
-        await popup.locator("#useAppleIntelligence").check();
+        await popup.screenshot({ path: path.join(outputDir, `popup-settings-light-${popupEngine}.png`) });
+        await popup.locator("#providerSelect").selectOption("apple");
         assert.equal(await popup.locator("#remoteApiSettings").isVisible(), false);
         await popup.locator("#saveButton").click();
         assert.equal(await popup.locator("#apiKey").inputValue(), "scenario-only-key");
-        await popup.screenshot({ path: path.join(outputDir, "popup-apple-light.png") });
-        await popup.locator("#useMacosVisionOcr").check();
+        await popup.screenshot({ path: path.join(outputDir, `popup-apple-light-${popupEngine}.png`) });
+        await popup.locator("#providerSelect").selectOption("macos");
         assert.equal(await popup.locator("#macosVisionSettings").isVisible(), true);
-        await popup.locator("#useIosOcrServer").check();
+        await popup.locator("#providerSelect").selectOption("ios");
         assert.equal(await popup.locator("#iosOcrSettings").isVisible(), true);
         assert.equal(await popup.locator("#macosVisionSettings").isVisible(), false);
-        await popup.locator("#useApiVision").check();
+        await popup.locator("#providerSelect").selectOption("api");
         await popup.locator("#panelScroll").evaluate((node) => { node.scrollTop = node.scrollHeight; });
         const saveBounds = await popup.locator("#saveButton").boundingBox();
-        assert.ok(saveBounds.y >= 0 && saveBounds.y + saveBounds.height <= 590);
+        assert.ok(saveBounds.y >= 0 && saveBounds.y + saveBounds.height <= 440);
         assert.ok(await popup.locator("#panelScroll").evaluate((node) => node.scrollTop > 0));
         await popup.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
         await popup.getByRole("tab", { name: "Translate", exact: true }).click();
-        await popup.screenshot({ path: path.join(outputDir, "popup-translate-dark.png") });
+        await popup.screenshot({ path: path.join(outputDir, `popup-translate-dark-${popupEngine}.png`) });
         await popup.locator("#alwaysAutoDetect").check();
         assert.equal(await popup.locator("#status").textContent(), "Unsaved changes");
         await popup.evaluate(() => { window.__popupFail = true; });
         await popup.locator("#saveButton").click();
         await popup.locator('#status[data-kind="error"]').waitFor();
-        await popup.screenshot({ path: path.join(outputDir, "popup-error-dark.png") });
+        await popup.screenshot({ path: path.join(outputDir, `popup-error-dark-${popupEngine}.png`) });
         assert.deepEqual(popupErrors, []);
-        summary.push({ scenario: "popup_apple_ui_tabs_providers_keyboard_themes_and_errors", saveBounds });
+        summary.push({ scenario: "popup_apple_ui_tabs_providers_keyboard_themes_and_errors", engine: popupEngine, saveBounds });
         await popup.close();
       } finally {
         await browser.close();

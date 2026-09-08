@@ -22,7 +22,8 @@ const elements = {
   modelSummary: document.getElementById("modelSummary"),
   storageLabel: document.getElementById("storageLabel"),
   activityIndicator: document.getElementById("activityIndicator"),
-  useApiVision: document.getElementById("useApiVision"),
+  providerSelect: document.getElementById("providerSelect"),
+  providerHelp: document.getElementById("providerHelp"),
   alwaysAutoDetect: document.getElementById("alwaysAutoDetect"),
   apiEndpoint: document.getElementById("apiEndpoint"),
   apiKey: document.getElementById("apiKey"),
@@ -42,10 +43,7 @@ const elements = {
   status: document.getElementById("status"),
   macRetentionNote: document.getElementById("macRetentionNote"),
   targetLanguage: document.getElementById("targetLanguage"),
-  triggerUsesAutoMode: document.getElementById("triggerUsesAutoMode"),
-  useAppleIntelligence: document.getElementById("useAppleIntelligence"),
-  useIosOcrServer: document.getElementById("useIosOcrServer"),
-  useMacosVisionOcr: document.getElementById("useMacosVisionOcr")
+  triggerUsesAutoMode: document.getElementById("triggerUsesAutoMode")
 };
 
 let settingsLoaded = false;
@@ -94,10 +92,14 @@ function updateDraftState() {
 }
 
 function updateProviderSummary() {
-  const local = elements.useAppleIntelligence.checked;
-  elements.providerSummary.textContent = local ? "Apple Intelligence" : elements.useMacosVisionOcr.checked
-    ? "Mac text recognition" : elements.useIosOcrServer.checked ? "iPhone text recognition" : "API translation";
+  const provider = elements.providerSelect.value;
+  const local = provider === "apple";
+  elements.providerSummary.textContent = local ? "Apple Intelligence" : provider === "macos"
+    ? "Mac text recognition" : provider === "ios" ? "iPhone text recognition" : "API translation";
   elements.modelSummary.textContent = local ? "Private, on this Mac" : elements.model.value.trim() || "Choose a model in Settings";
+  elements.providerHelp.textContent = local ? "Private on-device translation. Requires macOS 26 or later."
+    : provider === "macos" ? "Apple Vision reads the text; your API translates it."
+    : provider === "ios" ? "Your iPhone reads the text; your API translates it." : "Use your chosen vision model.";
 }
 
 function showStatus(message, isError = false) {
@@ -116,9 +118,9 @@ function readFormSettings() {
     model: elements.model.value,
     targetLanguage: elements.targetLanguage.value,
     triggerUsesAutoMode: elements.triggerUsesAutoMode.checked,
-    useAppleIntelligence: elements.useAppleIntelligence.checked,
-    useIosOcrServer: elements.useIosOcrServer.checked,
-    useMacosVisionOcr: elements.useMacosVisionOcr.checked
+    useAppleIntelligence: elements.providerSelect.value === "apple",
+    useIosOcrServer: elements.providerSelect.value === "ios",
+    useMacosVisionOcr: elements.providerSelect.value === "macos"
   });
 }
 
@@ -132,25 +134,18 @@ function fillForm(settings) {
   elements.model.value = values.model;
   elements.targetLanguage.value = values.targetLanguage;
   elements.triggerUsesAutoMode.checked = values.triggerUsesAutoMode;
-  elements.useAppleIntelligence.checked = values.useAppleIntelligence;
-  elements.useIosOcrServer.checked = values.useIosOcrServer;
-  elements.useMacosVisionOcr.checked = values.useMacosVisionOcr;
-  elements.useApiVision.checked = !values.useAppleIntelligence && !values.useMacosVisionOcr && !values.useIosOcrServer;
+  elements.providerSelect.value = values.useAppleIntelligence ? "apple" : values.useMacosVisionOcr ? "macos" : values.useIosOcrServer ? "ios" : "api";
   updateProviderSettingsVisibility();
 }
 
 function updateProviderSettingsVisibility() {
-  elements.remoteApiSettings.hidden = elements.useAppleIntelligence.checked;
-  elements.macosVisionSettings.hidden = !elements.useMacosVisionOcr.checked;
-  elements.iosOcrSettings.hidden = !elements.useIosOcrServer.checked;
+  elements.remoteApiSettings.hidden = elements.providerSelect.value === "apple";
+  elements.macosVisionSettings.hidden = elements.providerSelect.value !== "macos";
+  elements.iosOcrSettings.hidden = elements.providerSelect.value !== "ios";
   updateProviderSummary();
 }
 
-function selectOcrProvider(provider) {
-  elements.useApiVision.checked = provider === "api";
-  elements.useAppleIntelligence.checked = provider === "apple";
-  elements.useMacosVisionOcr.checked = provider === "macos";
-  elements.useIosOcrServer.checked = provider === "ios";
+function selectOcrProvider() {
   updateProviderSettingsVisibility();
   updateDraftState();
 }
@@ -207,7 +202,9 @@ async function initShortcutText() {
     throw new Error(response?.error || "Could not load keyboard shortcuts.");
   }
   const activeCommand = response?.commands?.find((command) => command.name === "activate-translation");
-  elements.shortcutText.textContent = activeCommand?.shortcut || "Not assigned";
+  const shortcut = activeCommand?.shortcut || "Not assigned";
+  elements.shortcutText.textContent = /Command|Meta/.test(shortcut)
+    ? shortcut.replace(/Command|Meta/g, "⌘").replace(/Shift/g, "⇧").replace(/Control|Ctrl/g, "⌃").replace(/Option|Alt/g, "⌥").replace(/\+/g, "") : shortcut;
 }
 
 async function initialize() {
@@ -226,7 +223,7 @@ async function initialize() {
   elements.extensionIdText.textContent = chrome.runtime.id;
   await initShortcutText();
   if (statusRevision === initialStatusRevision) {
-    showStatus(!elements.useAppleIntelligence.checked && !elements.apiKey.value
+    showStatus(elements.providerSelect.value !== "apple" && !elements.apiKey.value
       ? "Add an API key in Settings to start." : "Ready to translate");
   }
 }
@@ -235,19 +232,7 @@ elements.saveButton.addEventListener("click", () => runAction("Saving settings�
 
 elements.pasteApiKeyButton.addEventListener("click", () => runAction("Reading clipboard…", pasteApiKeyFromClipboard));
 
-elements.useApiVision.addEventListener("change", () => selectOcrProvider("api"));
-
-elements.useMacosVisionOcr.addEventListener("change", () => {
-  selectOcrProvider("macos");
-});
-
-elements.useAppleIntelligence.addEventListener("change", () => {
-  selectOcrProvider("apple");
-});
-
-elements.useIosOcrServer.addEventListener("change", () => {
-  selectOcrProvider("ios");
-});
+elements.providerSelect.addEventListener("change", selectOcrProvider);
 
 elements.manualButton.addEventListener("click", () => runAction("Preparing translation…", async () => {
     await saveSettings("Settings saved.");

@@ -99,9 +99,11 @@ Remote translation endpoints must support the requested JSON response format. Un
 
 ## Interface
 
-Translect uses selected components from [Puppertino](https://github.com/codedgar/Puppertino), an MIT-licensed macOS-inspired CSS framework. The styles are bundled locally with the extension, not loaded from a CDN. System fonts, light/dark appearance, keyboard focus, and reduced-motion/transparency preferences are supported. The web interface follows [Apple's Liquid Glass design guidance](https://developer.apple.com/documentation/technologyoverviews/liquid-glass), but does not claim native optical refraction.
+Translect's interface is calibrated against native AppKit controls and [real macOS Tahoe Control Center and Safari screenshots](https://512pixels.net/projects/aqua-screenshot-library/macos-26-tahoe/). It uses a compact toolbar, grouped action tiles, neutral translucent materials and native select menus, following [Apple's guidance on control grouping and materials](https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass). All styles are local and self-contained; no component framework, remote assets, image-based buttons or rendering engine is required. System appearance, keyboard focus, increased contrast, and reduced-motion/transparency preferences are supported.
 
-The **Translate** tab contains image actions, target language, and browsing switches. The **Settings** tab contains translation methods and connections. **Save settings**, status/error messages, and the clear-translations control remain available in the footer. The selection button always starts manual selection; the shortcut's auto-mode preference does not change that button's action.
+The **Translate** tab contains image actions, target language, and automatic translation. The **Settings** tab contains the translation method, connections, and shortcut preference. **Save**, status/error messages, and the clear-translations control remain available in the footer. The selection button always starts manual selection; the shortcut's auto-mode preference does not change that button's action.
+
+For local UI verification, `npm run test:scenarios` exercises the popup and extension with mock responses. Set `TRANSLECT_POPUP_ENGINE=webkit` to run the popup and vertical-text harness with WebKit; other extension scenarios still use Chromium. Install the optional test browser with `PLAYWRIGHT_SKIP_BROWSER_GC=1 npx playwright install webkit`. Test images are written under `output/playwright/scenario-suite/`; no real model API calls are made unless live mode is explicitly enabled.
 
 ## Settings
 

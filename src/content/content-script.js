@@ -102,13 +102,14 @@ function ensureStyles() {
   style.id = STYLE_ID;
   style.textContent = `
     #${ROOT_ID} {
-      --translect-material: rgba(250, 250, 252, 0.92);
-      --translect-solid: #f5f5f7;
-      --translect-ink: #1d1d1f;
-      --translect-edge: rgba(0, 0, 0, 0.12);
+      --translect-material: rgba(245, 246, 248, 0.82);
+      --translect-solid: #f2f3f5;
+      --translect-ink: #333336;
+      --translect-edge: rgba(255, 255, 255, 0.42);
+      --translect-sheen: rgba(255, 255, 255, 0.6);
       --translect-hover: rgba(0, 0, 0, 0.07);
       --translect-accent: #007aff;
-      --translect-shadow: 0 8px 28px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+      --translect-shadow: 0 6px 22px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.08), inset 0 1px 0 var(--translect-sheen);
       position: fixed;
       inset: 0;
       z-index: 2147483646;
@@ -125,7 +126,7 @@ function ensureStyles() {
       overflow: hidden;
       border-radius: 12px;
       box-shadow: none;
-      outline: 1px solid var(--translect-edge);
+      outline: none;
       background: transparent;
       pointer-events: none;
     }
@@ -142,8 +143,8 @@ function ensureStyles() {
       border-radius: 999px;
       background: var(--translect-material);
       box-shadow: var(--translect-shadow);
-      -webkit-backdrop-filter: blur(18px) saturate(150%);
-      backdrop-filter: blur(18px) saturate(150%);
+      -webkit-backdrop-filter: blur(24px) saturate(140%);
+      backdrop-filter: blur(24px) saturate(140%);
       pointer-events: auto;
     }
 
@@ -163,13 +164,18 @@ function ensureStyles() {
       box-shadow: none;
       color: var(--translect-ink);
       cursor: pointer;
-      font: 600 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: 500 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       transition: background-color 120ms ease, color 120ms ease;
       pointer-events: auto;
     }
 
     #${ROOT_ID} .translect-overlay-control:hover {
       background: var(--translect-hover);
+    }
+
+    #${ROOT_ID} .translect-overlay-control:active {
+      background: var(--translect-hover);
+      filter: brightness(0.9);
     }
 
     #${ROOT_ID} .translect-overlay-control:focus-visible {
@@ -189,7 +195,7 @@ function ensureStyles() {
       stroke: currentColor;
       stroke-linecap: round;
       stroke-linejoin: round;
-      stroke-width: 1.8;
+      stroke-width: 1.65;
     }
 
     #${ROOT_ID} .translect-toast-stack {
@@ -205,16 +211,16 @@ function ensureStyles() {
     #${ROOT_ID} .translect-toast {
       padding: 12px 14px;
       border: 1px solid var(--translect-edge);
-      border-radius: 16px;
+      border-radius: 20px;
       background: var(--translect-material);
       color: var(--translect-ink);
       font-size: 13px;
       line-height: 1.45;
-      font-weight: 500;
+      font-weight: 400;
       overflow-wrap: anywhere;
       box-shadow: var(--translect-shadow);
-      -webkit-backdrop-filter: blur(18px) saturate(150%);
-      backdrop-filter: blur(18px) saturate(150%);
+      -webkit-backdrop-filter: blur(24px) saturate(140%);
+      backdrop-filter: blur(24px) saturate(140%);
     }
 
     #${ROOT_ID} .translect-selection-layer {
@@ -238,10 +244,10 @@ function ensureStyles() {
       background: var(--translect-material);
       color: var(--translect-ink);
       font-size: 13px;
-      font-weight: 500;
+      font-weight: 400;
       text-align: center;
-      -webkit-backdrop-filter: blur(18px) saturate(150%);
-      backdrop-filter: blur(18px) saturate(150%);
+      -webkit-backdrop-filter: blur(24px) saturate(140%);
+      backdrop-filter: blur(24px) saturate(140%);
       box-shadow: var(--translect-shadow);
       pointer-events: none;
       overflow-wrap: anywhere;
@@ -267,13 +273,13 @@ function ensureStyles() {
 
     @media (prefers-color-scheme: dark) {
       #${ROOT_ID} {
-        --translect-material: rgba(40, 40, 44, 0.94);
-        --translect-solid: #28282c;
-        --translect-ink: #f5f5f7;
-        --translect-edge: rgba(255, 255, 255, 0.2);
-        --translect-hover: rgba(255, 255, 255, 0.12);
-        --translect-accent: #0a84ff;
-        --translect-shadow: 0 8px 28px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        --translect-material: rgba(52, 56, 64, 0.78);
+        --translect-solid: #343840;
+        --translect-ink: #e4e4e6;
+        --translect-edge: rgba(255, 255, 255, 0.08);
+        --translect-sheen: rgba(255, 255, 255, 0.16);
+        --translect-hover: rgba(255, 255, 255, 0.1);
+        --translect-shadow: 0 6px 22px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.16), inset 0 1px 0 var(--translect-sheen);
       }
     }
 
@@ -290,6 +296,14 @@ function ensureStyles() {
         background: var(--translect-solid);
         -webkit-backdrop-filter: none;
         backdrop-filter: none;
+      }
+    }
+
+    @media (prefers-contrast: more) {
+      #${ROOT_ID} .translect-overlay-controls,
+      #${ROOT_ID} .translect-toast,
+      #${ROOT_ID} .translect-selection-hud {
+        border-color: currentColor;
       }
     }
   `;
