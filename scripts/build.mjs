@@ -35,6 +35,8 @@ async function copyStaticFiles() {
   });
   await cp(path.join(srcDir, "popup", "popup.html"), path.join(distDir, "popup", "popup.html"));
   await cp(path.join(srcDir, "popup", "popup.css"), path.join(distDir, "popup", "popup.css"));
+  await rm(path.join(distDir, "popup", "vendor"), { recursive: true, force: true });
+  await cp(path.join(srcDir, "popup", "vendor"), path.join(distDir, "popup", "vendor"), { recursive: true });
 
   const manifestPath = path.join(srcDir, "manifest.json");
   const manifestText = await readFile(manifestPath, "utf8");
@@ -65,7 +67,7 @@ if (watchMode) {
     if (!relativePath || !(
       relativePath === "manifest.json" || relativePath.startsWith("icons/") ||
       relativePath === "icons" || relativePath === "popup/popup.html" ||
-      relativePath === "popup/popup.css"
+      relativePath === "popup/popup.css" || relativePath.startsWith("popup/vendor/")
     )) return;
 
     clearTimeout(copyTimer);

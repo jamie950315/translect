@@ -1,116 +1,70 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Translect</title>
-    <link rel="stylesheet" href="./popup.css">
-  </head>
-  <body>
-    <main class="shell">
-      <section class="hero">
-        <p class="eyebrow">Image Translation Overlay</p>
-        <h1>Translect</h1>
-        <p class="summary">Translate text on webpage images and redraw it directly over the original artwork.</p>
-      </section>
-
-      <section class="card">
-        <label class="field">
-          <span>Target language</span>
-          <input id="targetLanguage" type="text" placeholder="Traditional Chinese">
-        </label>
-
-        <div id="remoteApiSettings" class="provider-settings">
-          <label class="field">
-            <span>API endpoint URL</span>
-            <input id="apiEndpoint" type="url" placeholder="https://api.openai.com/v1">
-            <small>Base URL is fine. The extension will call <code>/chat/completions</code>.</small>
-          </label>
-
-          <label class="field">
-            <span>API key</span>
-            <span class="inline-input">
-              <input id="apiKey" type="password" placeholder="sk-...">
-              <button id="pasteApiKeyButton" class="compact" type="button">Paste</button>
-            </span>
-          </label>
-
-          <label class="field">
-            <span>Model ID</span>
-            <input id="model" type="text" placeholder="gpt-5.4-mini">
-          </label>
+<html lang="en" class="p-auto-dark-mode">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Translect</title><link rel="stylesheet" href="./popup.css"></head>
+<body>
+<svg class="symbol-definitions" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="scan" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m8 0h3a2 2 0 0 0 2-2v-3M7 9h10M7 13h7M7 17h4"/></symbol>
+  <symbol id="selection" viewBox="0 0 24 24"><path d="M4 8V4h4m8 0h4v4M4 16v4h4m4-9 8 4-4 1-1 4-4-8ZM11 4h2M4 11v2"/></symbol>
+  <symbol id="gear" viewBox="0 0 24 24"><path d="m9 3-.6 2.2-2 .9-2-.7-2 3.3L4 10.4v2.3l-1.6 1.7 2 3.3 2-.6 2 .9L9 20h4l.6-2 2-.9 2 .6 2-3.3-1.6-1.7v-2.3l1.6-1.7-2-3.3-2 .7-2-.9L13 3Z"/><circle cx="11" cy="11.5" r="3"/></symbol>
+  <symbol id="lock" viewBox="0 0 24 24"><rect x="6" y="10" width="12" height="10" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v2"/></symbol>
+  <symbol id="chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="trash" viewBox="0 0 24 24"><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></symbol>
+  <symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/></symbol>
+</svg>
+<main class="shell" id="popupShell">
+  <header class="toolbar">
+    <div class="app-identity"><span class="app-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M6 9h14M13 5v4m-4 0c0 7 5 11 10 13M18 9c-1 6-5 11-11 14M18 26l5-13 5 13m-8-4h6"/></svg></span><div><h1>Translect</h1><p>Image translation</p></div></div>
+    <span class="storage-indicator"><svg class="icon" aria-hidden="true"><use href="#lock"/></svg><span id="storageLabel">Settings</span></span>
+  </header>
+  <nav class="navigation" aria-label="Translect">
+    <div class="p-segmented-controls pane-tabs" role="tablist" aria-label="Views">
+      <button id="translateTab" type="button" role="tab" aria-selected="true" aria-controls="translatePanel" tabindex="0">Translate</button>
+      <button id="settingsTab" type="button" role="tab" aria-selected="false" aria-controls="settingsPanel" tabindex="-1">Settings</button>
+    </div>
+  </nav>
+  <div class="panel-scroll" id="panelScroll">
+    <section id="translatePanel" role="tabpanel" aria-labelledby="translateTab">
+      <fieldset id="translateFields" disabled>
+        <label class="language-row" for="targetLanguage"><svg class="icon language-icon" aria-hidden="true"><use href="#globe"/></svg><span><span class="field-label">Translate into</span><input id="targetLanguage" class="p-form-text p-form-no-validate" type="text" placeholder="Traditional Chinese" autocomplete="off"></span></label>
+      </fieldset>
+      <div class="translation-actions">
+        <button id="autoButton" class="p-btn p-prim-col action-button" type="button" disabled><svg class="icon" aria-hidden="true"><use href="#scan"/></svg><span>Translate visible images</span></button>
+        <button id="manualButton" class="p-btn action-button" type="button" disabled><svg class="icon" aria-hidden="true"><use href="#selection"/></svg><span>Select an area or image</span></button>
+      </div>
+      <button id="editProviderButton" class="method-summary" type="button" aria-label="Change translation method">
+        <span class="method-symbol" aria-hidden="true"><svg class="icon"><use href="#gear"/></svg></span><span class="method-text"><span class="field-label" id="providerSummary">Loading settings…</span><span class="secondary" id="modelSummary">Your translation method</span></span><svg class="icon disclosure" aria-hidden="true"><use href="#chevron"/></svg>
+      </button>
+      <fieldset id="behaviorFields" class="preferences" disabled><legend>While browsing</legend>
+        <div class="grouped-list">
+          <label class="preference-row" for="alwaysAutoDetect"><span class="row-text"><span class="field-label">Automatic translation</span><span class="secondary">Translate new visible images as you browse</span></span><span class="p-form-switch"><input id="alwaysAutoDetect" type="checkbox" role="switch"><span aria-hidden="true"></span></span></label>
+          <label class="preference-row" for="triggerUsesAutoMode"><span class="row-text"><span class="field-label">Shortcut translates all</span><span class="secondary">Skip selecting an image first</span></span><span class="p-form-switch"><input id="triggerUsesAutoMode" type="checkbox" role="switch"><span aria-hidden="true"></span></span></label>
         </div>
-      </section>
-
-      <section class="card toggles">
-        <label class="switch">
-          <input id="useAppleIntelligence" type="checkbox">
-          <span>
-            <strong>Use Apple Intelligence (local)</strong>
-            <small>Identify, group, label, and translate image text on this Mac. Requires macOS 26 or later and Apple Intelligence.</small>
-          </span>
-        </label>
-
-        <label class="switch">
-          <input id="useMacosVisionOcr" type="checkbox">
-          <span>
-            <strong>Use macOS Vision OCR</strong>
-            <small>Use a local native host for Apple Vision OCR, then translate detected text.</small>
-          </span>
-        </label>
-
-        <label id="macosVisionSettings" class="field provider-settings">
-          <span>macOS OCR connection name</span>
-          <input id="macosVisionHostName" type="text" placeholder="com.translect.ocr">
-          <small>Chrome extension ID: <code id="extensionIdText"></code>. Safari uses the containing Translect app automatically.</small>
-        </label>
-
-        <label class="switch">
-          <input id="useIosOcrServer" type="checkbox">
-          <span>
-            <strong>Use iOS OCR Server</strong>
-            <small>Use local iPhone OCR for text boxes, then translate detected text.</small>
-          </span>
-        </label>
-
-        <label id="iosOcrSettings" class="field provider-settings">
-          <span>iOS OCR Server URL</span>
-          <input id="iosOcrEndpoint" type="url" placeholder="http://127.0.0.1:8000">
-          <small>Base URL is fine. The extension will call <code>/upload</code>.</small>
-        </label>
-
-        <label class="switch">
-          <input id="alwaysAutoDetect" type="checkbox">
-          <span>
-            <strong>Always auto detect</strong>
-            <small>Automatically translate visible images after pages load.</small>
-          </span>
-        </label>
-
-        <label class="switch">
-          <input id="triggerUsesAutoMode" type="checkbox">
-          <span>
-            <strong>Toolbar button / shortcut uses auto mode</strong>
-            <small>Skip manual selection and translate visible images immediately.</small>
-          </span>
-        </label>
-      </section>
-
-      <section class="card actions">
-        <button id="saveButton" class="primary" type="button">Save settings</button>
-        <button id="manualButton" type="button">Select area or click image</button>
-        <button id="autoButton" type="button">Translate visible images</button>
-        <button id="clearButton" type="button">Clear overlays</button>
-      </section>
-
-      <section class="card footer-card">
-        <p id="status" class="status" aria-live="polite"></p>
-        <p id="macRetentionNote" class="hint" hidden>Settings and your API key are retained securely on this Mac and restored after reinstalling. Removing the app does not erase this backup.</p>
-        <p class="shortcut">Shortcut: <span id="shortcutText">Not assigned</span></p>
-        <p class="hint">Shortcut keys can be changed in your browser’s extension settings.</p>
-      </section>
-    </main>
-
-    <script type="module" src="./popup.js"></script>
-  </body>
+      </fieldset>
+    </section>
+    <section id="settingsPanel" role="tabpanel" aria-labelledby="settingsTab" hidden>
+      <fieldset id="settingsFields" disabled>
+        <fieldset class="preferences method-picker"><legend>Translation method</legend><div class="grouped-list">
+          <label class="p-form-radio-cont method-option"><input id="useApiVision" type="radio" name="provider" value="api" checked><span aria-hidden="true"></span><span class="row-text"><span class="field-label">API translation</span><span class="secondary">Use your chosen vision model</span></span></label>
+          <label class="p-form-radio-cont method-option"><input id="useAppleIntelligence" type="radio" name="provider" value="apple"><span aria-hidden="true"></span><span class="row-text"><span class="field-label">Apple Intelligence</span><span class="secondary">On-device translation · macOS 26 or later</span></span></label>
+          <label class="p-form-radio-cont method-option"><input id="useMacosVisionOcr" type="radio" name="provider" value="macos"><span aria-hidden="true"></span><span class="row-text"><span class="field-label">Mac text recognition</span><span class="secondary">Apple Vision, translated with your API</span></span></label>
+          <label class="p-form-radio-cont method-option"><input id="useIosOcrServer" type="radio" name="provider" value="ios"><span aria-hidden="true"></span><span class="row-text"><span class="field-label">iPhone text recognition</span><span class="secondary">iOS OCR Server, translated with your API</span></span></label>
+        </div></fieldset>
+        <section id="remoteApiSettings" class="connection-settings" aria-labelledby="apiHeading"><h2 id="apiHeading">API connection</h2><div class="grouped-list form-group">
+          <label class="field" for="apiEndpoint"><span class="field-label">Server address</span><input id="apiEndpoint" class="p-form-text p-form-no-validate" type="url" placeholder="https://api.openai.com/v1" autocomplete="off" spellcheck="false"><small>A base URL or a /chat/completions endpoint.</small></label>
+          <label class="field" for="model"><span class="field-label">Model</span><input id="model" class="p-form-text p-form-no-validate" type="text" placeholder="gpt-5.4-mini" autocomplete="off" spellcheck="false"></label>
+          <div class="field"><label class="field-label" for="apiKey">API key</label><div class="key-input"><input id="apiKey" class="p-form-text p-form-no-validate" type="password" placeholder="Enter your API key" autocomplete="off" spellcheck="false"><button id="pasteApiKeyButton" class="p-btn compact" type="button">Paste</button></div></div>
+        </div></section>
+        <section id="macosVisionSettings" class="connection-settings" hidden><h2>Mac connection</h2><div class="grouped-list form-group"><label class="field" for="macosVisionHostName"><span class="field-label">Native host name</span><input id="macosVisionHostName" class="p-form-text p-form-no-validate" type="text" placeholder="com.translect.ocr" spellcheck="false"><small>Safari connects through the Translect app automatically.</small></label><p class="host-note">Chrome extension ID<br><code id="extensionIdText"></code></p></div></section>
+        <section id="iosOcrSettings" class="connection-settings" hidden><h2>iPhone connection</h2><div class="grouped-list form-group"><label class="field" for="iosOcrEndpoint"><span class="field-label">OCR server address</span><input id="iosOcrEndpoint" class="p-form-text p-form-no-validate" type="url" placeholder="http://127.0.0.1:8000" autocomplete="off" spellcheck="false"><small>A base URL or an /upload endpoint.</small></label></div></section>
+      </fieldset>
+      <p id="macRetentionNote" class="retention-note" hidden>Settings and your API key are saved in this Mac’s Keychain. They remain available after reinstalling Translect.</p>
+    </section>
+  </div>
+  <footer class="bottom-bar">
+    <div class="status-row"><span id="activityIndicator" class="activity-indicator" aria-hidden="true" hidden></span><p id="status" role="status" aria-live="polite" aria-atomic="true">Loading settings…</p></div>
+    <div class="footer-actions"><span class="shortcut-hint" title="Change shortcuts in your browser’s extension settings"><svg class="icon" aria-hidden="true"><use href="#selection"/></svg><kbd id="shortcutText">Not assigned</kbd></span><button id="clearButton" class="clear-button" type="button" aria-label="Clear translations on this page" title="Clear translations on this page"><svg class="icon" aria-hidden="true"><use href="#trash"/></svg></button><button id="saveButton" class="p-btn compact save-button" type="button" disabled>Save settings</button></div>
+  </footer>
+</main>
+<script type="module" src="./popup.js"></script>
+</body>
 </html>

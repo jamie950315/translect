@@ -59,6 +59,7 @@ let mockFailure = false;
 let mockRequestCount = 0;
 
 function contentTypeForPath(pathname) {
+  if (pathname.endsWith(".css")) return "text/css; charset=utf-8";
   if (pathname.endsWith(".js")) {
     return "text/javascript; charset=utf-8";
   }
@@ -940,7 +941,7 @@ function assertOverlayStyle(state, expectedCount) {
   for (const overlay of state.overlayStyles) {
     assert.equal(overlay.background, "rgba(0, 0, 0, 0)");
     assert.equal(overlay.boxShadow, "none");
-    assert.equal(overlay.outline, "rgba(161, 63, 44, 0.65)");
+    assert.equal(overlay.outline, "rgba(0, 0, 0, 0.12)");
   }
 }
 
@@ -1049,19 +1050,55 @@ async function runSuite() {
         assert.equal(await page.evaluate(() => document.body.dataset.lateCover), "false",
           "Overlapping covers must be painted before any translated text");
         summary.push({ scenario: "overlapping_covers_preserve_translated_text" });
-        const popup = await browser.newPage({ viewport: { width: 380, height: 560 } });
-        const popupHtml = (await readFile(path.join(rootDir, "src/popup/popup.html"), "utf8"))
-          .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, "")
-          .replace(/<link\b[^>]*>/g, "");
-        await popup.setContent(popupHtml);
-        await popup.addStyleTag({ content: await readFile(path.join(rootDir, "src/popup/popup.css"), "utf8") });
-        await popup.locator("#saveButton").scrollIntoViewIfNeeded();
-        const saveBounds = await popup.locator("#saveButton").boundingBox();
-        assert.ok(saveBounds.y >= 0 && saveBounds.y + saveBounds.height <= 560);
-        assert.ok(await popup.evaluate(() => document.body.scrollTop > 0), "Popup must scroll internally inside Safari's capped view");
+        const popup = await browser.newPage({ viewport: { width: 390, height: 590 } });
+        const popupErrors = [];
+        popup.on("pageerror", (error) => popupErrors.push(error.message));
+        await popup.addInitScript(() => {
+          let settings = { apiKey: "scenario-only-key", model: "gpt-5.4-mini", targetLanguage: "Traditional Chinese" };
+          window.__popupMessages = [];
+          window.chrome = { runtime: { id: "scenario-extension", async sendMessage(message) {
+            window.__popupMessages.push(message);
+            if (message.type === "get-settings") return { ok: true, settings, settingsRetainedOnMac: true };
+            if (message.type === "get-commands") return { ok: true, commands: [{ name: "activate-translation", shortcut: "⇧⌘L" }] };
+            if (window.__popupFail) return { ok: false, error: "Keychain is locked. Unlock it to save settings." };
+            if (message.type === "save-settings") settings = message.settings;
+            return { ok: true, settings };
+          } } };
+        });
+        await popup.goto(`${server.origin}/dist/popup/popup.html`);
+        await popup.locator("#saveButton:enabled").waitFor();
+        assert.equal(await popup.locator(".shell").evaluate((node) => getComputedStyle(node).display), "flex", "Popup styles must load");
+        await popup.screenshot({ path: path.join(outputDir, "popup-translate-light.png") });
+        await popup.getByRole("tab", { name: "Translate", exact: true }).focus();
+        await popup.keyboard.press("ArrowRight");
+        assert.equal(await popup.locator("#settingsPanel").isVisible(), true);
+        await popup.screenshot({ path: path.join(outputDir, "popup-settings-light.png") });
+        await popup.locator("#useAppleIntelligence").check();
+        assert.equal(await popup.locator("#remoteApiSettings").isVisible(), false);
         await popup.locator("#saveButton").click();
-        await popup.screenshot({ path: path.join(outputDir, "popup-scrolled-actions.png") });
-        summary.push({ scenario: "popup_actions_reachable_in_capped_view", saveBounds });
+        assert.equal(await popup.locator("#apiKey").inputValue(), "scenario-only-key");
+        await popup.screenshot({ path: path.join(outputDir, "popup-apple-light.png") });
+        await popup.locator("#useMacosVisionOcr").check();
+        assert.equal(await popup.locator("#macosVisionSettings").isVisible(), true);
+        await popup.locator("#useIosOcrServer").check();
+        assert.equal(await popup.locator("#iosOcrSettings").isVisible(), true);
+        assert.equal(await popup.locator("#macosVisionSettings").isVisible(), false);
+        await popup.locator("#useApiVision").check();
+        await popup.locator("#panelScroll").evaluate((node) => { node.scrollTop = node.scrollHeight; });
+        const saveBounds = await popup.locator("#saveButton").boundingBox();
+        assert.ok(saveBounds.y >= 0 && saveBounds.y + saveBounds.height <= 590);
+        assert.ok(await popup.locator("#panelScroll").evaluate((node) => node.scrollTop > 0));
+        await popup.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+        await popup.getByRole("tab", { name: "Translate", exact: true }).click();
+        await popup.screenshot({ path: path.join(outputDir, "popup-translate-dark.png") });
+        await popup.locator("#alwaysAutoDetect").check();
+        assert.equal(await popup.locator("#status").textContent(), "Unsaved changes");
+        await popup.evaluate(() => { window.__popupFail = true; });
+        await popup.locator("#saveButton").click();
+        await popup.locator('#status[data-kind="error"]').waitFor();
+        await popup.screenshot({ path: path.join(outputDir, "popup-error-dark.png") });
+        assert.deepEqual(popupErrors, []);
+        summary.push({ scenario: "popup_apple_ui_tabs_providers_keyboard_themes_and_errors", saveBounds });
         await popup.close();
       } finally {
         await browser.close();

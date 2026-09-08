@@ -102,11 +102,22 @@ function ensureStyles() {
   style.id = STYLE_ID;
   style.textContent = `
     #${ROOT_ID} {
+      --translect-material: rgba(250, 250, 252, 0.92);
+      --translect-solid: #f5f5f7;
+      --translect-ink: #1d1d1f;
+      --translect-edge: rgba(0, 0, 0, 0.12);
+      --translect-hover: rgba(0, 0, 0, 0.07);
+      --translect-accent: #007aff;
+      --translect-shadow: 0 8px 28px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.5);
       position: fixed;
       inset: 0;
       z-index: 2147483646;
       pointer-events: none;
-      font-family: Georgia, "Times New Roman", serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--translect-ink);
+      text-align: left;
     }
 
     #${ROOT_ID} .translect-overlay {
@@ -114,7 +125,7 @@ function ensureStyles() {
       overflow: hidden;
       border-radius: 12px;
       box-shadow: none;
-      outline: 1px solid rgba(161, 63, 44, 0.65);
+      outline: 1px solid var(--translect-edge);
       background: transparent;
       pointer-events: none;
     }
@@ -125,41 +136,50 @@ function ensureStyles() {
       right: 8px;
       z-index: 1;
       display: flex;
-      gap: 5px;
+      gap: 2px;
+      padding: 3px;
+      border: 1px solid var(--translect-edge);
+      border-radius: 999px;
+      background: var(--translect-material);
+      box-shadow: var(--translect-shadow);
+      -webkit-backdrop-filter: blur(18px) saturate(150%);
+      backdrop-filter: blur(18px) saturate(150%);
       pointer-events: auto;
     }
 
     #${ROOT_ID} .translect-overlay-control {
+      -webkit-appearance: none;
+      appearance: none;
+      box-sizing: border-box;
       display: grid;
       width: 30px;
       height: 30px;
       padding: 0;
+      margin: 0;
       place-items: center;
-      border: 1px solid rgba(255, 250, 243, 0.32);
-      border-radius: 9px;
-      background: rgba(22, 20, 18, 0.78);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
-      color: #fffaf3;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      box-shadow: none;
+      color: var(--translect-ink);
       cursor: pointer;
       font: 600 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+      transition: background-color 120ms ease, color 120ms ease;
       pointer-events: auto;
     }
 
     #${ROOT_ID} .translect-overlay-control:hover {
-      border-color: rgba(255, 250, 243, 0.68);
-      background: rgba(22, 20, 18, 0.94);
-      transform: translateY(-1px);
+      background: var(--translect-hover);
     }
 
     #${ROOT_ID} .translect-overlay-control:focus-visible {
-      outline: 2px solid rgba(255, 250, 243, 0.95);
-      outline-offset: 2px;
+      outline: 2px solid var(--translect-accent);
+      outline-offset: 1px;
     }
 
     #${ROOT_ID} .translect-overlay-control[aria-pressed="true"] {
-      border-color: rgba(158, 218, 231, 0.82);
-      background: rgba(35, 92, 110, 0.92);
+      background: #007aff;
+      color: #fff;
     }
 
     #${ROOT_ID} .translect-overlay-control svg {
@@ -184,26 +204,23 @@ function ensureStyles() {
 
     #${ROOT_ID} .translect-toast {
       padding: 12px 14px;
-      border-radius: 14px;
-      background: rgba(22, 20, 18, 0.88);
-      color: #fffaf3;
+      border: 1px solid var(--translect-edge);
+      border-radius: 16px;
+      background: var(--translect-material);
+      color: var(--translect-ink);
       font-size: 13px;
       line-height: 1.45;
-      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+      font-weight: 500;
+      overflow-wrap: anywhere;
+      box-shadow: var(--translect-shadow);
+      -webkit-backdrop-filter: blur(18px) saturate(150%);
+      backdrop-filter: blur(18px) saturate(150%);
     }
 
     #${ROOT_ID} .translect-selection-layer {
       position: fixed;
       inset: 0;
-      background:
-        linear-gradient(180deg, rgba(12, 18, 22, 0.08), rgba(12, 18, 22, 0.18)),
-        repeating-linear-gradient(
-          90deg,
-          rgba(255, 255, 255, 0.05) 0,
-          rgba(255, 255, 255, 0.05) 1px,
-          transparent 1px,
-          transparent 36px
-        );
+      background: rgba(0, 0, 0, 0.12);
       cursor: crosshair;
       pointer-events: auto;
     }
@@ -213,33 +230,67 @@ function ensureStyles() {
       left: 50%;
       bottom: 18px;
       transform: translateX(-50%);
-      padding: 10px 14px;
+      box-sizing: border-box;
+      max-width: calc(100vw - 32px);
+      padding: 12px 18px;
+      border: 1px solid var(--translect-edge);
       border-radius: 999px;
-      background: rgba(18, 17, 16, 0.85);
-      color: #fffaf3;
+      background: var(--translect-material);
+      color: var(--translect-ink);
       font-size: 13px;
-      backdrop-filter: blur(12px);
-      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+      font-weight: 500;
+      text-align: center;
+      -webkit-backdrop-filter: blur(18px) saturate(150%);
+      backdrop-filter: blur(18px) saturate(150%);
+      box-shadow: var(--translect-shadow);
       pointer-events: none;
-      white-space: nowrap;
+      overflow-wrap: anywhere;
     }
 
     #${ROOT_ID} .translect-selection-box,
     #${ROOT_ID} .translect-hover-box {
       position: fixed;
-      border: 2px solid rgba(70, 130, 160, 0.9);
-      border-radius: 14px;
+      border: 2px solid var(--translect-accent);
+      border-radius: 8px;
       box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.65);
       pointer-events: none;
     }
 
     #${ROOT_ID} .translect-selection-box {
-      background: rgba(255, 247, 240, 0.12);
+      background: rgba(0, 122, 255, 0.08);
     }
 
     #${ROOT_ID} .translect-hover-box {
       border-style: dashed;
-      background: rgba(70, 130, 160, 0.08);
+      background: rgba(0, 122, 255, 0.06);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      #${ROOT_ID} {
+        --translect-material: rgba(40, 40, 44, 0.94);
+        --translect-solid: #28282c;
+        --translect-ink: #f5f5f7;
+        --translect-edge: rgba(255, 255, 255, 0.2);
+        --translect-hover: rgba(255, 255, 255, 0.12);
+        --translect-accent: #0a84ff;
+        --translect-shadow: 0 8px 28px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #${ROOT_ID} .translect-overlay-control {
+        transition: none;
+      }
+    }
+
+    @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+      #${ROOT_ID} .translect-overlay-controls,
+      #${ROOT_ID} .translect-toast,
+      #${ROOT_ID} .translect-selection-hud {
+        background: var(--translect-solid);
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+      }
     }
   `;
 

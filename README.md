@@ -97,19 +97,25 @@ Deleting the app does **not** delete retained settings. To permanently remove th
 
 Remote translation endpoints must support the requested JSON response format. Unsupported formats, incomplete translations, and API failures are reported rather than silently retried with different settings. Remote translation and iOS OCR requests time out after 120 seconds; image downloads time out after 30 seconds. A failed image can be retried manually without reloading the page. Changing tabs while a screenshot is being taken cancels that capture.
 
+## Interface
+
+Translect uses selected components from [Puppertino](https://github.com/codedgar/Puppertino), an MIT-licensed macOS-inspired CSS framework. The styles are bundled locally with the extension, not loaded from a CDN. System fonts, light/dark appearance, keyboard focus, and reduced-motion/transparency preferences are supported. The web interface follows [Apple's Liquid Glass design guidance](https://developer.apple.com/documentation/technologyoverviews/liquid-glass), but does not claim native optical refraction.
+
+The **Translate** tab contains image actions, target language, and browsing switches. The **Settings** tab contains translation methods and connections. **Save settings**, status/error messages, and the clear-translations control remain available in the footer. The selection button always starts manual selection; the shortcut's auto-mode preference does not change that button's action.
+
 ## Settings
 
-The popup stores settings in Chromium extension storage:
+The popup uses browser storage in Chromium and the Mac Keychain retention described above in Safari:
 
 - API endpoint URL
 - API key
 - Model ID
 - Target language
 - Auto-detect behavior
-- Apple Intelligence local mode toggle
-- iOS OCR Server toggle
+- Apple Intelligence local method
+- iOS OCR Server method
 - iOS OCR Server endpoint
-- macOS Vision OCR toggle
+- macOS Vision OCR method
 - macOS native host name
 
 The macOS native host name defaults to `com.translect.ocr`.
