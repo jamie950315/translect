@@ -273,11 +273,11 @@ function ensureStyles() {
 
     @media (prefers-color-scheme: dark) {
       #${ROOT_ID} {
-        --translect-material: rgba(52, 56, 64, 0.78);
-        --translect-solid: #343840;
+        --translect-material: rgba(35, 36, 38, 0.96);
+        --translect-solid: #232426;
         --translect-ink: #e4e4e6;
         --translect-edge: rgba(255, 255, 255, 0.08);
-        --translect-sheen: rgba(255, 255, 255, 0.16);
+        --translect-sheen: rgba(255, 255, 255, 0.10);
         --translect-hover: rgba(255, 255, 255, 0.1);
         --translect-shadow: 0 6px 22px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.16), inset 0 1px 0 var(--translect-sheen);
       }

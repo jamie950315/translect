@@ -19,24 +19,30 @@
   --accent: #007aff;
   --focus: rgba(0,122,255,.46);
   --error: #a51d19;
+  --tile-sheen: rgba(255,255,255,.065);
+  --footer-wash: rgba(127,132,142,.08);
   --tile-shadow: 0 2px 7px rgba(27,37,51,.075), inset 0 .5px 0 rgba(255,255,255,.92);
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --label: rgba(255,255,255,.88);
     --secondary: rgba(255,255,255,.60);
-    --material: rgba(56,57,61,.84);
-    --sheen: rgba(255,255,255,.10);
-    --rim: rgba(255,255,255,.17);
+    /* Dark Aqua window/text background resolves to #1e1e1e on this Mac.
+       Keep the translucent shell close to it instead of stacking white veils. */
+    --material: rgba(35,36,38,.96);
+    --sheen: rgba(255,255,255,.025);
+    --rim: rgba(255,255,255,.10);
     --separator: rgba(255,255,255,.095);
-    --control: rgba(255,255,255,.085);
-    --control-hover: rgba(255,255,255,.14);
+    --control: rgba(255,255,255,.075);
+    --control-hover: rgba(255,255,255,.11);
     --pressed: rgba(0,0,0,.15);
-    --field: rgba(12,15,20,.27);
+    --field: #1e1e1e;
     --field-border: rgba(255,255,255,.15);
-    --selected: rgba(255,255,255,.18);
+    --selected: rgba(255,255,255,.13);
     --error: #ffb4ab;
-    --tile-shadow: 0 2px 8px rgba(0,0,0,.15), inset 0 .5px 0 rgba(255,255,255,.22);
+    --tile-shadow: 0 2px 8px rgba(0,0,0,.15), inset 0 .5px 0 rgba(255,255,255,.10);
+    --tile-sheen: rgba(255,255,255,.018);
+    --footer-wash: rgba(0,0,0,.075);
   }
 }
 * { box-sizing: border-box; }
@@ -91,7 +97,7 @@ h1 { font-size: 13px; font-weight: 600; letter-spacing: -.2px; margin: 0; }
 .action-tile {
   position: relative; display: flex; flex-direction: column; align-items: flex-start;
   padding: 13px 14px 12px; height: 104px; border: 0; border-radius: 20px;
-  background: linear-gradient(180deg,rgba(255,255,255,.065),transparent 24px),var(--control);
+  background: linear-gradient(180deg,var(--tile-sheen),transparent 24px),var(--control);
   box-shadow: var(--tile-shadow); text-align: left;
 }
 .action-symbol {
@@ -157,7 +163,7 @@ code { font: inherit; overflow-wrap: anywhere; }
 .retention-note { display: block; padding: 2px 0 10px; font-size: 10px; }
 .bottom-bar {
   padding: 5px 16px 10px; flex: 0 0 auto;
-  background: linear-gradient(0deg,rgba(127,132,142,.08),transparent);
+  background: linear-gradient(0deg,var(--footer-wash),transparent);
 }
 .status-row { display: flex; align-items: flex-start; gap: 6px; min-height: 15px; margin-bottom: 5px; }
 #status { margin: 0; color: var(--secondary); font-size: 10px; line-height: 1.45; max-height: 60px; overflow: auto; overflow-wrap: anywhere; }
@@ -182,5 +188,5 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   :root { --material: #eef0f3; --control: #f9f9fb; }
   body { -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
-@media (prefers-color-scheme: dark) and (prefers-reduced-transparency: reduce) { :root { --material: #343840; --control: #444850; } }
+@media (prefers-color-scheme: dark) and (prefers-reduced-transparency: reduce) { :root { --material: #232426; --control: #343434; } }
 @media (prefers-contrast: more) { :root { --secondary: var(--label); --field-border: currentColor; --accent: #0058bd; } .control-button, .action-tile, .switch-control > span { outline: 1px solid currentColor; } }

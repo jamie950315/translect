@@ -1094,6 +1094,8 @@ async function runSuite() {
         assert.ok(await popup.locator("#panelScroll").evaluate((node) => node.scrollTop > 0));
         await popup.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
         await popup.getByRole("tab", { name: "Translate", exact: true }).click();
+        assert.equal(await popup.locator("body").evaluate((node) => getComputedStyle(node).backgroundColor), "rgba(35, 36, 38, 0.96)");
+        assert.equal(await popup.locator("#apiEndpoint").evaluate((node) => getComputedStyle(node).backgroundColor), "rgb(30, 30, 30)");
         await popup.screenshot({ path: path.join(outputDir, `popup-translate-dark-${popupEngine}.png`) });
         await popup.locator("#alwaysAutoDetect").check();
         assert.equal(await popup.locator("#status").textContent(), "Unsaved changes");
