@@ -412,7 +412,35 @@ final class VisionOCRTests: XCTestCase {
         XCTAssertEqual(groups.dropFirst().first?.observationIndexes, [8, 9])
     }
 
-    func testBatchesAppleIntelligenceGroupsByTextSizeAndGroupCount() {
+    func testDenseLinesRespectTheSourceBudgetWithoutLosingVisionBoxes() {
+        let observations = (0..<8).map { index in
+            VisionOCRObservation(
+                text: String(repeating: "文", count: 133),
+                confidence: 0.9,
+                x: 20,
+                y: Double(index * 25),
+                width: 120,
+                height: 20
+            )
+        }
+        let groups = groupAppleIntelligenceObservations(observations)
+        XCTAssertEqual(groups.map(\.observationIndexes), [[0, 1, 2], [3, 4, 5], [6, 7]])
+        XCTAssertTrue(groups.allSatisfy { $0.text.utf8.count <= 1_500 })
+        XCTAssertEqual(groups.flatMap(\.observationIndexes), Array(0..<8))
+    }
+
+    func testRejectsAnOversizedSingleOCRGroupBeforeModelGeneration() {
+        let group = AppleIntelligenceTextGroup(
+            index: 0,
+            observationIndexes: [0],
+            text: String(repeating: "文", count: 501)
+        )
+        XCTAssertThrowsError(try makeAppleIntelligenceTranslationBatches([group])) { error in
+            XCTAssertFalse(String(describing: error).contains(group.text))
+        }
+    }
+
+    func testBatchesAppleIntelligenceGroupsByTextSizeAndGroupCount() throws {
         let groups = [
             AppleIntelligenceTextGroup(index: 0, observationIndexes: [0], text: "aaaa"),
             AppleIntelligenceTextGroup(index: 1, observationIndexes: [1], text: "bbbb"),
@@ -420,7 +448,7 @@ final class VisionOCRTests: XCTestCase {
             AppleIntelligenceTextGroup(index: 3, observationIndexes: [3], text: "d")
         ]
 
-        let batches = makeAppleIntelligenceTranslationBatches(
+        let batches = try makeAppleIntelligenceTranslationBatches(
             groups,
             maxGroupCount: 3,
             maxSourceBytes: 8
@@ -429,11 +457,11 @@ final class VisionOCRTests: XCTestCase {
         XCTAssertEqual(batches.map { $0.map(\.index) }, [[0, 1], [2, 3]])
     }
 
-    func testDefaultBatchesReserveSpaceForSchemaAndGeneratedTranslations() {
+    func testDefaultBatchesReserveSpaceForSchemaAndGeneratedTranslations() throws {
         let groups = (0..<30).map {
             AppleIntelligenceTextGroup(index: $0, observationIndexes: [$0], text: String(repeating: "x", count: 250))
         }
-        let batches = makeAppleIntelligenceTranslationBatches(groups)
+        let batches = try makeAppleIntelligenceTranslationBatches(groups)
         XCTAssertEqual(batches.flatMap { $0 }.map(\.index), groups.map(\.index))
         XCTAssertTrue(batches.allSatisfy { $0.count <= 8 && $0.reduce(0) { $0 + $1.text.utf8.count } <= 1_500 })
     }

@@ -63,13 +63,17 @@ export function createRetainedSettingsStore({ storage, nativeRequest }) {
     return normalizeSettings(DEFAULT_SETTINGS);
   }
 
+  async function write(update) {
+    const current = await read();
+    const settings = normalizeSettings({ ...current, ...update(current) });
+    if (nativeRequest) await native("settings-save", settings);
+    await storage.set({ [STORAGE_KEY]: cacheValue(settings) });
+    return settings;
+  }
+
   return {
     get: () => serialize(read),
-    save: (input = {}) => serialize(async () => {
-      const settings = normalizeSettings({ ...await read(), ...input });
-      if (nativeRequest) await native("settings-save", settings);
-      await storage.set({ [STORAGE_KEY]: cacheValue(settings) });
-      return settings;
-    })
+    save: (input = {}) => serialize(() => write(() => input)),
+    update: (update) => serialize(() => write(update))
   };
 }

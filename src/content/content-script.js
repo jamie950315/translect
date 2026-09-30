@@ -62,15 +62,19 @@ const state = {
   autoMutationObserver: null,
   autoScanHandle: null,
   emptyTranslationFingerprints: new WeakMap(),
+  failedTranslationFingerprints: new WeakMap(),
   initialized: false,
   inFlightElements: new WeakSet(),
   overlayEntries: new Set(),
   overlayMap: new WeakMap(),
+  overlayGeneration: 0,
+  autoScanPending: false,
   redditReuseEventsBound: false,
   redditReuseMutationObserver: null,
   redditReuseScanHandle: null,
   selectionCleanup: null,
   settings: null,
+  settingsRead: null,
   translatedFingerprints: new WeakMap(),
   translatedVisualFingerprints: new Set(),
   visibleTranslationInFlight: false,
@@ -547,6 +551,13 @@ function candidateImages() {
 }
 
 function scheduleOverlayRefresh() {
+  if (document.hidden) return;
+  for (const entry of state.overlayEntries) {
+    if (entry.anchorElement?.isConnected === false ||
+        (entry.anchorElement && entry.source !== redditImageUrl(entry.anchorElement))) {
+      removeOverlayEntry(entry);
+    }
+  }
   scheduleOverlayPositionRefresh(state.overlayEntries, (callback) =>
     window.requestAnimationFrame(callback)
   );
@@ -566,6 +577,9 @@ function removeOverlayEntry(entry) {
 
   entry.node.remove();
   state.overlayEntries.delete(entry);
+  if (entry.visualFingerprint) {
+    state.translatedVisualFingerprints.delete(entry.visualFingerprint);
+  }
   if (entry.anchorElement && state.overlayMap.get(entry.anchorElement) === entry) {
     state.overlayMap.delete(entry.anchorElement);
   }
@@ -580,6 +594,7 @@ function waitForNextPaint() {
 }
 
 function clearOverlays() {
+  state.overlayGeneration += 1;
   for (const entry of [...state.overlayEntries]) {
     removeOverlayEntry(entry);
   }
@@ -659,7 +674,7 @@ function createOverlayControls(entry) {
   return controls;
 }
 
-function attachOverlay({ anchorElement, canvas, fixedRect }) {
+function attachOverlay({ anchorElement, canvas, fixedRect, visualFingerprint }) {
   ensureRoot();
 
   if (anchorElement) {
@@ -682,6 +697,8 @@ function attachOverlay({ anchorElement, canvas, fixedRect }) {
   const entry = {
     anchorElement,
     canvas: configureOverlayCanvas(canvas),
+    source: anchorElement ? redditImageUrl(anchorElement) : null,
+    visualFingerprint,
     getRect: fixedRect
       ? () => fixedRect
       : () => anchorElement?.getBoundingClientRect(),
@@ -1700,10 +1717,12 @@ async function renderTranslatedCanvas(imageDataUrl, translation) {
 }
 
 async function translateViewportRect(rect) {
+  const generation = state.overlayGeneration;
   showToast("Translating selected area...");
   const snapshot = await captureSnapshot();
   const crop = cropRectFromSnapshot(snapshot, rect);
   const translation = await requestTranslation(crop.dataUrl);
+  if (generation !== state.overlayGeneration) return;
 
   if (!translation.blocks.length) {
     showToast("No translatable text was detected in that area.");
@@ -1711,6 +1730,7 @@ async function translateViewportRect(rect) {
   }
 
   const canvas = await renderTranslatedCanvas(crop.dataUrl, translation);
+  if (generation !== state.overlayGeneration) return;
   attachOverlay({
     canvas,
     fixedRect: rect
@@ -1723,6 +1743,8 @@ async function translateImageElement(imageElement, options = {}) {
   const fingerprint = measureImageFingerprint(imageElement, settings);
   const visualFingerprint = measureImageVisualFingerprint(imageElement, settings);
   const emptyRecord = state.emptyTranslationFingerprints.get(imageElement);
+  const generation = options.generation ?? state.overlayGeneration;
+  if (!imageJobIsCurrent({ imageElement, fingerprint, generation }, settings)) return;
 
   if (
     !options.force && (state.translatedVisualFingerprints.has(visualFingerprint) ||
@@ -1734,10 +1756,12 @@ async function translateImageElement(imageElement, options = {}) {
   if (
     !options.force &&
     emptyRecord?.fingerprint === fingerprint &&
-    emptyRecord.count >= 2
+    emptyRecord.count >= 1
   ) {
     return;
   }
+
+  if (!options.force && state.failedTranslationFingerprints.get(imageElement) === fingerprint) return;
 
   if (state.inFlightElements.has(imageElement)) {
     return;
@@ -1757,15 +1781,18 @@ async function translateImageElement(imageElement, options = {}) {
 
   try {
     const crop = await imageDataForElement(imageElement, options.snapshot || null);
+    if (!imageJobIsCurrent({ imageElement, fingerprint, generation }, settings)) return;
     const cachedTranslation = !options.force
       ? findCachedRedditTranslation(imageElement, settings)
       : null;
 
     if (cachedTranslation?.blocks?.length) {
       const canvas = await renderTranslatedCanvas(crop.dataUrl, cachedTranslation);
+      if (!imageJobIsCurrent({ imageElement, fingerprint, generation }, settings)) return;
       attachOverlay({
         anchorElement: imageElement,
-        canvas
+        canvas,
+        visualFingerprint
       });
       state.translatedFingerprints.set(imageElement, fingerprint);
       state.translatedVisualFingerprints.add(visualFingerprint);
@@ -1773,6 +1800,7 @@ async function translateImageElement(imageElement, options = {}) {
     }
 
     const translation = await requestTranslation(crop.dataUrl);
+    if (!imageJobIsCurrent({ imageElement, fingerprint, generation }, settings)) return;
 
     if (!translation.blocks.length) {
       state.emptyTranslationFingerprints.set(imageElement, {
@@ -1786,18 +1814,31 @@ async function translateImageElement(imageElement, options = {}) {
     }
 
     const canvas = await renderTranslatedCanvas(crop.dataUrl, translation);
+    if (!imageJobIsCurrent({ imageElement, fingerprint, generation }, settings)) return;
     attachOverlay({
       anchorElement: imageElement,
-      canvas
+      canvas,
+      visualFingerprint
     });
     rememberRedditTranslation(imageElement, settings, translation);
     state.emptyTranslationFingerprints.delete(imageElement);
     state.translatedFingerprints.set(imageElement, fingerprint);
     state.translatedVisualFingerprints.add(visualFingerprint);
+    state.failedTranslationFingerprints.delete(imageElement);
+  } catch (error) {
+    state.failedTranslationFingerprints.set(imageElement, fingerprint);
+    throw error;
   } finally {
     state.inFlightElements.delete(imageElement);
     state.visualInFlightFingerprints.delete(visualFingerprint);
   }
+}
+
+function imageJobIsCurrent(job, settings) {
+  return job.generation === state.overlayGeneration &&
+    job.imageElement.isConnected !== false &&
+    measureImageFingerprint(job.imageElement, settings) === job.fingerprint &&
+    (!state.settings || translationSettingsKey(state.settings) === translationSettingsKey(settings));
 }
 
 function chunkItems(items, size) {
@@ -1808,10 +1849,11 @@ function chunkItems(items, size) {
   return chunks;
 }
 
-async function prepareImageBatchJob(imageElement, settings, snapshot, force) {
+async function prepareImageBatchJob(imageElement, settings, snapshot, force, generation) {
   const fingerprint = measureImageFingerprint(imageElement, settings);
   const visualFingerprint = measureImageVisualFingerprint(imageElement, settings);
   const emptyRecord = state.emptyTranslationFingerprints.get(imageElement);
+  if (!imageJobIsCurrent({ imageElement, fingerprint, generation }, settings)) return null;
 
   if (
     !force && (state.translatedVisualFingerprints.has(visualFingerprint) ||
@@ -1823,10 +1865,12 @@ async function prepareImageBatchJob(imageElement, settings, snapshot, force) {
   if (
     !force &&
     emptyRecord?.fingerprint === fingerprint &&
-    emptyRecord.count >= 2
+    emptyRecord.count >= 1
   ) {
     return null;
   }
+
+  if (!force && state.failedTranslationFingerprints.get(imageElement) === fingerprint) return null;
 
   if (
     state.inFlightElements.has(imageElement) ||
@@ -1844,24 +1888,32 @@ async function prepareImageBatchJob(imageElement, settings, snapshot, force) {
     ? findCachedRedditTranslation(imageElement, settings)
     : null;
 
-  if (cachedTranslation?.blocks?.length) {
-    const crop = await imageDataForElement(imageElement, snapshot);
-    const canvas = await renderTranslatedCanvas(crop.dataUrl, cachedTranslation);
-    attachOverlay({
-      anchorElement: imageElement,
-      canvas
-    });
-    state.translatedFingerprints.set(imageElement, fingerprint);
-    state.translatedVisualFingerprints.add(visualFingerprint);
-    return null;
-  }
-
   state.inFlightElements.add(imageElement);
   state.visualInFlightFingerprints.add(visualFingerprint);
   let crop;
   try {
     crop = await imageDataForElement(imageElement, snapshot);
+    if (!imageJobIsCurrent({ imageElement, fingerprint, generation }, settings)) {
+      state.inFlightElements.delete(imageElement);
+      state.visualInFlightFingerprints.delete(visualFingerprint);
+      return null;
+    }
+    if (cachedTranslation?.blocks?.length) {
+      try {
+        const canvas = await renderTranslatedCanvas(crop.dataUrl, cachedTranslation);
+        if (imageJobIsCurrent({ imageElement, fingerprint, generation }, settings)) {
+          attachOverlay({ anchorElement: imageElement, canvas, visualFingerprint });
+          state.translatedFingerprints.set(imageElement, fingerprint);
+          state.translatedVisualFingerprints.add(visualFingerprint);
+        }
+        return null;
+      } finally {
+        state.inFlightElements.delete(imageElement);
+        state.visualInFlightFingerprints.delete(visualFingerprint);
+      }
+    }
   } catch (error) {
+    state.failedTranslationFingerprints.set(imageElement, fingerprint);
     state.inFlightElements.delete(imageElement);
     state.visualInFlightFingerprints.delete(visualFingerprint);
     throw error;
@@ -1871,6 +1923,7 @@ async function prepareImageBatchJob(imageElement, settings, snapshot, force) {
     crop,
     emptyRecord,
     fingerprint,
+    generation,
     id: `image-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     imageElement,
     visualFingerprint
@@ -1883,6 +1936,7 @@ function releaseImageBatchJob(job) {
 }
 
 async function finishImageBatchJob(job, settings, translation) {
+  if (!imageJobIsCurrent(job, settings)) return;
   if (!translation?.blocks?.length) {
     state.emptyTranslationFingerprints.set(job.imageElement, {
       count:
@@ -1895,23 +1949,27 @@ async function finishImageBatchJob(job, settings, translation) {
   }
 
   const canvas = await renderTranslatedCanvas(job.crop.dataUrl, translation);
+  if (!imageJobIsCurrent(job, settings)) return;
   attachOverlay({
     anchorElement: job.imageElement,
-    canvas
+    canvas,
+    visualFingerprint: job.visualFingerprint
   });
   rememberRedditTranslation(job.imageElement, settings, translation);
   state.emptyTranslationFingerprints.delete(job.imageElement);
   state.translatedFingerprints.set(job.imageElement, job.fingerprint);
   state.translatedVisualFingerprints.add(job.visualFingerprint);
+  state.failedTranslationFingerprints.delete(job.imageElement);
 }
 
-async function translateVisibleImagesWithIosOcr(images, settings, snapshot, force) {
+async function translateVisibleImagesWithIosOcr(images, settings, snapshot, force, generation) {
   const jobs = [];
   const errors = [];
 
   for (const image of images) {
+    if (generation !== state.overlayGeneration || (!force && document.hidden)) break;
     try {
-      const job = await prepareImageBatchJob(image, settings, snapshot, force);
+      const job = await prepareImageBatchJob(image, settings, snapshot, force, generation);
       if (job) {
         jobs.push(job);
       }
@@ -1923,6 +1981,7 @@ async function translateVisibleImagesWithIosOcr(images, settings, snapshot, forc
 
   for (const chunk of chunkItems(jobs, 3)) {
     try {
+      if (generation !== state.overlayGeneration || (!force && document.hidden)) continue;
       const translations = await requestTranslationBatch(
         chunk.map((job) => ({
           id: job.id,
@@ -1937,11 +1996,13 @@ async function translateVisibleImagesWithIosOcr(images, settings, snapshot, forc
         try {
           await finishImageBatchJob(job, settings, translationById.get(job.id));
         } catch (error) {
+          state.failedTranslationFingerprints.set(job.imageElement, job.fingerprint);
           errors.push(error);
           showToast(`Image translation failed: ${error.message || String(error)}`);
         }
       }
     } catch (error) {
+      for (const job of chunk) state.failedTranslationFingerprints.set(job.imageElement, job.fingerprint);
       errors.push(error);
       showToast(`Image translation failed: ${error.message || String(error)}`);
     } finally {
@@ -1983,11 +2044,15 @@ async function applyCachedRedditTranslation(imageElement, settings, snapshot) {
   state.visualInFlightFingerprints.add(visualFingerprint);
   try {
     const fingerprint = measureImageFingerprint(imageElement, settings);
+    const generation = state.overlayGeneration;
     const crop = await imageDataForElement(imageElement, snapshot);
+    if (!imageJobIsCurrent({ imageElement, fingerprint, generation }, settings)) return false;
     const canvas = await renderTranslatedCanvas(crop.dataUrl, cachedTranslation);
+    if (!imageJobIsCurrent({ imageElement, fingerprint, generation }, settings)) return false;
     attachOverlay({
       anchorElement: imageElement,
-      canvas
+      canvas,
+      visualFingerprint
     });
     state.translatedFingerprints.set(imageElement, fingerprint);
     state.translatedVisualFingerprints.add(visualFingerprint);
@@ -1999,7 +2064,7 @@ async function applyCachedRedditTranslation(imageElement, settings, snapshot) {
 }
 
 async function applyCachedRedditTranslationsToVisibleImages() {
-  if (!isRedditPage()) {
+  if (!isRedditPage() || document.hidden) {
     return;
   }
 
@@ -2013,6 +2078,7 @@ async function applyCachedRedditTranslationsToVisibleImages() {
   }
 
   for (const image of images) {
+    if (document.hidden) break;
     try {
       await applyCachedRedditTranslation(image, settings, null);
     } catch (error) {
@@ -2023,14 +2089,20 @@ async function applyCachedRedditTranslationsToVisibleImages() {
 
 async function translateVisibleImages(force = false) {
   if (state.visibleTranslationInFlight) {
+    if (!force) state.autoScanPending = true;
     return;
   }
 
+  if (!force && document.hidden) return;
+
+  const generation = state.overlayGeneration;
   state.visibleTranslationInFlight = true;
   try {
   const settings = await getSettings();
   const images = candidateImages().filter((image) =>
-    force || !imageHasCurrentTranslation(image, settings)
+    force || (!imageHasCurrentTranslation(image, settings) &&
+      state.emptyTranslationFingerprints.get(image)?.fingerprint !== measureImageFingerprint(image, settings) &&
+      state.failedTranslationFingerprints.get(image) !== measureImageFingerprint(image, settings))
   );
   if (!images.length) {
     if (force) {
@@ -2041,15 +2113,18 @@ async function translateVisibleImages(force = false) {
 
   showToast(`Translating ${images.length} visible image${images.length > 1 ? "s" : ""}...`);
   if (settings.useIosOcrServer) {
-    await translateVisibleImagesWithIosOcr(images, settings, null, force);
+    await translateVisibleImagesWithIosOcr(images, settings, null, force, generation);
+    if (generation !== state.overlayGeneration || (!force && document.hidden)) return;
     showToast("Visible image translation finished.");
     return;
   }
 
   const errors = [];
   for (const image of images) {
+    if (generation !== state.overlayGeneration) break;
+    if (!force && (document.hidden || !state.settings?.alwaysAutoDetect)) break;
     try {
-      await translateImageElement(image, { force });
+      await translateImageElement(image, { force, generation });
     } catch (error) {
       errors.push(error);
       showToast(`Image translation failed: ${error.message || String(error)}`);
@@ -2059,9 +2134,14 @@ async function translateVisibleImages(force = false) {
   if (errors.length) {
     throw new AggregateError(errors, `Visible image translation failed: ${errors[0].message || String(errors[0])}`);
   }
+  if (generation !== state.overlayGeneration || (!force && document.hidden)) return;
   showToast("Visible image translation finished.");
   } finally {
     state.visibleTranslationInFlight = false;
+    if (state.autoScanPending) {
+      state.autoScanPending = false;
+      if (state.settings?.alwaysAutoDetect) scheduleAutoScan();
+    }
   }
 }
 
@@ -2228,12 +2308,25 @@ async function getSettings() {
 
   // Settings are already available to the isolated extension content script.
   // Avoid a nested round-trip to the worker while it awaits a page-action reply.
-  const stored = await chrome.storage.local.get(STORAGE_KEY);
+  if (!state.settingsRead) {
+    state.settingsRead = chrome.storage.local.get(STORAGE_KEY);
+  }
+  const request = state.settingsRead;
+  let stored;
+  try {
+    stored = await request;
+  } catch (error) {
+    if (state.settingsRead === request) state.settingsRead = null;
+    throw error;
+  }
+  // A storage change can arrive while the earlier read is still in progress.
+  if (state.settingsRead !== request) return getSettings();
   state.settings = normalizeSettings(stored[STORAGE_KEY] || {});
   return state.settings;
 }
 
 function stopAutoObservers() {
+  state.autoScanPending = false;
   state.autoMutationObserver?.disconnect();
   state.autoMutationObserver = null;
   if (state.autoScanHandle) {
@@ -2243,6 +2336,7 @@ function stopAutoObservers() {
   if (state.autoEventsBound) {
     window.removeEventListener("scroll", scheduleAutoScan, true);
     window.removeEventListener("resize", scheduleAutoScan);
+    if (!state.redditReuseEventsBound) document.removeEventListener("load", handleImageLoad, true);
     state.autoEventsBound = false;
   }
 }
@@ -2252,7 +2346,10 @@ function scheduleAutoScan() {
     clearTimeout(state.autoScanHandle);
   }
 
+  if (document.hidden) return;
+
   state.autoScanHandle = window.setTimeout(() => {
+    state.autoScanHandle = null;
     translateVisibleImages(false).catch((error) => {
       console.warn("Automatic image translation failed.", error);
     });
@@ -2264,11 +2361,14 @@ function scheduleRedditReuseScan() {
     return;
   }
 
+  if (document.hidden) return;
+
   if (state.redditReuseScanHandle) {
     clearTimeout(state.redditReuseScanHandle);
   }
 
   state.redditReuseScanHandle = window.setTimeout(() => {
+    state.redditReuseScanHandle = null;
     applyCachedRedditTranslationsToVisibleImages().catch((error) => {
       console.warn("Could not apply cached Reddit translations.", error);
     });
@@ -2278,10 +2378,32 @@ function scheduleRedditReuseScan() {
 function hasPageMutations(records) {
   return records.some((record) => {
     if (record.target.closest?.(`#${ROOT_ID}`)) return false;
+    if (record.type === "attributes") {
+      return ["IMG", "SOURCE"].includes(record.target.tagName);
+    }
     return [...record.addedNodes, ...record.removedNodes].some((node) =>
       node.id !== ROOT_ID && node.id !== STYLE_ID
     );
   });
+}
+
+function handleImageLoad(event) {
+  if (event.target?.tagName !== "IMG") return;
+  if (state.settings?.alwaysAutoDetect) scheduleAutoScan();
+  scheduleRedditReuseScan();
+}
+
+function handlePageVisibility() {
+  if (document.hidden) {
+    clearTimeout(state.autoScanHandle);
+    clearTimeout(state.redditReuseScanHandle);
+    state.autoScanHandle = null;
+    state.redditReuseScanHandle = null;
+    return;
+  }
+  scheduleOverlayRefresh();
+  if (state.settings?.alwaysAutoDetect) scheduleAutoScan();
+  scheduleRedditReuseScan();
 }
 
 function startRedditReuseObserver() {
@@ -2290,17 +2412,23 @@ function startRedditReuseObserver() {
   }
 
   state.redditReuseMutationObserver = new MutationObserver((records) => {
-    if (hasPageMutations(records)) scheduleRedditReuseScan();
+    if (hasPageMutations(records)) {
+      scheduleOverlayRefresh();
+      scheduleRedditReuseScan();
+    }
   });
   state.redditReuseMutationObserver.observe(document.documentElement, {
     childList: true,
-    subtree: true
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["src", "srcset", "sizes"]
   });
 
   if (!state.redditReuseEventsBound) {
     window.addEventListener("popstate", scheduleRedditReuseScan);
     window.addEventListener("scroll", scheduleRedditReuseScan, true);
     window.addEventListener("resize", scheduleRedditReuseScan);
+    document.addEventListener("load", handleImageLoad, true);
     state.redditReuseEventsBound = true;
   }
 
@@ -2308,21 +2436,29 @@ function startRedditReuseObserver() {
 }
 
 async function applySettings() {
+  state.overlayGeneration += 1;
   state.settings = null;
+  state.settingsRead = null;
   const settings = await getSettings();
 
   if (settings.alwaysAutoDetect) {
     if (!state.autoMutationObserver) {
       state.autoMutationObserver = new MutationObserver((records) => {
-        if (hasPageMutations(records)) scheduleAutoScan();
+        if (hasPageMutations(records)) {
+          scheduleOverlayRefresh();
+          scheduleAutoScan();
+        }
       });
       state.autoMutationObserver.observe(document.documentElement, {
         childList: true,
-        subtree: true
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["src", "srcset", "sizes"]
       });
       if (!state.autoEventsBound) {
         window.addEventListener("scroll", scheduleAutoScan, true);
         window.addEventListener("resize", scheduleAutoScan);
+        document.addEventListener("load", handleImageLoad, true);
         state.autoEventsBound = true;
       }
     }
@@ -2389,6 +2525,7 @@ if (!state.initialized) {
   });
   window.addEventListener("scroll", scheduleOverlayRefresh, true);
   window.addEventListener("resize", scheduleOverlayRefresh);
+  document.addEventListener("visibilitychange", handlePageVisibility);
   startRedditReuseObserver();
   window.addEventListener("load", () => {
     startRedditReuseObserver();

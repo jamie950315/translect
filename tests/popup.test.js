@@ -90,6 +90,32 @@ test("selection button stays manual even when the shortcut uses auto mode", asyn
   expect(send).toHaveBeenLastCalledWith({ type: MESSAGE_TYPES.DISPATCH_ACTIVE_TAB, action: "start-manual-selection" });
 });
 
+test.each(["manualButton", "autoButton"])("%s uses saved settings without rewriting them", async (button) => {
+  const send = vi.fn(async ({ type }) => {
+    if (type === MESSAGE_TYPES.GET_SETTINGS) return { ok: true, settings: { apiKey: "stored-key" } };
+    if (type === MESSAGE_TYPES.GET_COMMANDS) return { ok: true, commands: [] };
+    return { ok: true };
+  });
+  const e = await loadPopup(send);
+  await e.get(button).listeners.click();
+  expect(send.mock.calls.filter(([message]) => message.type === MESSAGE_TYPES.SAVE_SETTINGS)).toHaveLength(0);
+  expect(send.mock.calls.filter(([message]) => message.type === MESSAGE_TYPES.DISPATCH_ACTIVE_TAB)).toHaveLength(1);
+});
+
+test("translation saves a changed draft before dispatching its action", async () => {
+  const send = vi.fn(async ({ type }) => {
+    if (type === MESSAGE_TYPES.GET_SETTINGS) return { ok: true, settings: { apiKey: "stored-key" } };
+    if (type === MESSAGE_TYPES.GET_COMMANDS) return { ok: true, commands: [] };
+    return { ok: true };
+  });
+  const e = await loadPopup(send);
+  e.get("targetLanguage").value = "Japanese";
+  await e.get("manualButton").listeners.click();
+  expect(send.mock.calls.filter(([message]) => message.type === MESSAGE_TYPES.SAVE_SETTINGS)).toHaveLength(1);
+  expect(send.mock.calls.find(([message]) => message.type === MESSAGE_TYPES.SAVE_SETTINGS)[0].settings.targetLanguage).toBe("Japanese");
+  expect(send).toHaveBeenLastCalledWith({ type: MESSAGE_TYPES.DISPATCH_ACTIVE_TAB, action: "start-manual-selection" });
+});
+
 test("busy actions prevent duplicate requests and release controls on failure", async () => {
   let rejectSave;
   const send = vi.fn(async ({ type }) => {

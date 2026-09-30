@@ -2,11 +2,18 @@ import { describe, expect, test } from "vitest";
 
 import {
   buildChatCompletionsPayload,
+  buildSystemPrompt,
   extractAssistantText,
   parseTranslationResponse
 } from "../src/shared/api.js";
 
 describe("api helpers", () => {
+  test("the prompt's JSON example is valid JSON with escaped text line breaks", () => {
+    const prompt = buildSystemPrompt("Traditional Chinese");
+    const example = prompt.split("Return only valid JSON with this shape:\n")[1].split("\nRules:")[0];
+    expect(JSON.parse(example).blocks[0].translated_text).toBe("Translated text\nwith matching line breaks");
+  });
+
   test("extracts response text after reasoning items", () => {
     expect(extractAssistantText({ output: [
       { type: "reasoning", summary: [] },

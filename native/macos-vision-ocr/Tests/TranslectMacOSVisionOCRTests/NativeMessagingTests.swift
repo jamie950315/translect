@@ -40,4 +40,13 @@ final class NativeMessagingTests: XCTestCase {
             XCTAssertTrue(error is ReadFailure)
         }
     }
+
+    func testRoutesOnlyTheTopLevelOperation() {
+        XCTAssertEqual(nativeMessageOperation(Data(#"{"operation":"settings-save"}"#.utf8)), "settings-save")
+        XCTAssertEqual(nativeMessageOperation(Data(#"{"operation":"apple-intelligence-translate"}"#.utf8)), "apple-intelligence-translate")
+        XCTAssertNil(nativeMessageOperation(Data(#"{"imageDataUrl":"operation:settings-save","nested":{"operation":"settings-save"}}"#.utf8)))
+        XCTAssertNil(nativeMessageOperation(Data(#"{"operation":null}"#.utf8)))
+        XCTAssertNil(nativeMessageOperation(Data(#"{"operation":3}"#.utf8)))
+        XCTAssertNil(nativeMessageOperation(Data("invalid".utf8)))
+    }
 }

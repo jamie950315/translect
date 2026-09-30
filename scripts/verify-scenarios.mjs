@@ -1347,8 +1347,14 @@ async function runSuite() {
       assert.equal(failed.overlayCount, 0);
       assert.ok(!failed.toastTexts.some((text) => text.includes("translation finished")));
       const attempts = mockRequestCount;
+      await page.evaluate(() => {
+        const status = document.createElement("div");
+        status.textContent = "Unrelated page update";
+        document.body.append(status);
+        window.dispatchEvent(new Event("scroll"));
+      });
       await page.waitForTimeout(4000);
-      assert.equal(mockRequestCount, attempts, "Extension UI mutations must not retry failed requests");
+      assert.equal(mockRequestCount, attempts, "Page activity must not retry the same failed automatic request");
       mockFailure = false;
       const retry = await dispatchToActiveTab(serviceWorker, "fire", PAGE_ACTIONS.AUTO_TRANSLATE_VISIBLE);
       assert.equal(retry.ok, true, JSON.stringify(retry));

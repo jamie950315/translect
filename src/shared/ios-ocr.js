@@ -167,8 +167,8 @@ function groupOcrLines(lines) {
 
 export function normalizeIosOcrResult(imageId, responseJson) {
   validateOcrResponse(responseJson, "ocr_boxes");
-  const imageWidth = clampNumber(responseJson?.image_width, 1, 100000, 1);
-  const imageHeight = clampNumber(responseJson?.image_height, 1, 100000, 1);
+  const imageWidth = clampNumber(responseJson?.image_width ?? responseJson?.imageWidth, 1, 100000, 1);
+  const imageHeight = clampNumber(responseJson?.image_height ?? responseJson?.imageHeight, 1, 100000, 1);
   const ocrBoxes = Array.isArray(responseJson?.ocr_boxes) ? responseJson.ocr_boxes : [];
   const lines = ocrBoxes
     .map((box, index) => boxToLine(box, index, imageWidth, imageHeight))

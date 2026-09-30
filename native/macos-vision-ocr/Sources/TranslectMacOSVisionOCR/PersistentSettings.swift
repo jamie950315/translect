@@ -146,8 +146,7 @@ private func loadPersistentSettings(from store: any SettingsDataStore) throws ->
 }
 
 func isSettingsPersistenceRequest(_ data: Data) -> Bool {
-    guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let operation = object["operation"] as? String else { return false }
+    let operation = nativeMessageOperation(data)
     return operation == "settings-load" || operation == "settings-save"
 }
 

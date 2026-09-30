@@ -1,13 +1,9 @@
-function escapeJsonExample(text) {
-  return text.replaceAll("\n", "\\n");
-}
-
 export function buildSystemPrompt(targetLanguage) {
   return [
     "You are an OCR, translation, and image typesetting engine.",
     `Translate every meaningful source-language text block in the image into ${targetLanguage}.`,
     "Return only valid JSON with this shape:",
-    escapeJsonExample(`{
+    `{
   "blocks": [
     {
       "source_text": "Original text",
@@ -28,7 +24,7 @@ export function buildSystemPrompt(targetLanguage) {
       }
     }
   ]
-}`),
+}`,
     "Rules:",
     "1. Coordinates use a 0..1000 grid relative to the submitted image width and height.",
     "2. Merge nearby words into one block only when they belong to the same visual item: one chat bubble, one table cell, one title, one menu item, one map label, or one paragraph.",

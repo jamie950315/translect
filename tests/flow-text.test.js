@@ -7,6 +7,15 @@ import {
 import * as flowText from "../src/shared/flow-text.js";
 
 describe("flow text distribution", () => {
+  test("preserves the remaining translation when every line is full", () => {
+    expect(distributeTextAcrossBoxes("one two three four", [{ width: 3 }, { width: 3 }], {
+      measureWidth: (value) => value.length
+    })).toEqual(["one", "two three four"]);
+    expect(distributeTextAcrossBoxes("文字不可消失", [{ width: 2 }, { width: 2 }], {
+      measureWidth: (value) => value.length
+    }).join("")).toBe("文字不可消失");
+  });
+
   test("keeps the packing width inside a very narrow macOS Vision frame", () => {
     expect(flowText.resolveMacosVisionFlowTextBox?.({ width: 12 })).toEqual({ width: 8 });
   });

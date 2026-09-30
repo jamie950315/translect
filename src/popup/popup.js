@@ -167,6 +167,12 @@ async function saveSettings(message = "Settings saved.") {
   showStatus(retainedOnMac ? "Saved on this Mac." : "Settings saved.");
 }
 
+async function saveChangedSettings() {
+  if (JSON.stringify(readFormSettings()) !== savedDraft) {
+    await saveSettings();
+  }
+}
+
 async function pasteApiKeyFromClipboard() {
   elements.apiKey.focus();
 
@@ -235,14 +241,14 @@ elements.pasteApiKeyButton.addEventListener("click", () => runAction("Reading cl
 elements.providerSelect.addEventListener("change", selectOcrProvider);
 
 elements.manualButton.addEventListener("click", () => runAction("Preparing translation…", async () => {
-    await saveSettings("Settings saved.");
+    await saveChangedSettings();
     showStatus("Preparing translation…");
     await runPageAction(PAGE_ACTIONS.START_MANUAL_SELECTION);
     window.close();
 }));
 
 elements.autoButton.addEventListener("click", () => runAction("Translating visible images…", async () => {
-    await saveSettings("Settings saved.");
+    await saveChangedSettings();
     showStatus("Translating visible images…");
     await runPageAction(PAGE_ACTIONS.AUTO_TRANSLATE_VISIBLE);
     window.close();

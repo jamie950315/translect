@@ -49,6 +49,14 @@ describe("iOS OCR helpers", () => {
     });
   });
 
+  test("uses camel-case dimensions accepted by OCR response validation", () => {
+    const { image_width, image_height, ...response } = ocrJson;
+    const result = normalizeIosOcrResult("image-a", {
+      ...response, imageWidth: image_width, imageHeight: image_height
+    });
+    expect(result).toEqual(normalizeIosOcrResult("image-a", ocrJson));
+  });
+
   test("builds one text-only translation payload for multiple OCR images", () => {
     const payload = buildTextTranslationPayload({
       model: "gpt-5.4-mini",

@@ -15,9 +15,13 @@ private struct NativeOperationEnvelope: Decodable {
     let operation: String?
 }
 
-func isAppleIntelligenceTranslationRequest(_ data: Data) -> Bool {
+func nativeMessageOperation(_ data: Data) -> String? {
     let envelope = try? JSONDecoder().decode(NativeOperationEnvelope.self, from: data)
-    return envelope?.operation == "apple-intelligence-translate"
+    return envelope?.operation
+}
+
+func isAppleIntelligenceTranslationRequest(_ data: Data) -> Bool {
+    nativeMessageOperation(data) == "apple-intelligence-translate"
 }
 
 struct AppleIntelligenceResponse: Encodable {
@@ -55,10 +59,13 @@ struct AppleIntelligenceGroupTranslation {
     let translatedText: String
 }
 
+private let appleIntelligenceMaximumSourceBytes = 1_500
+
 enum AppleIntelligenceTranslationError: Error, CustomStringConvertible {
     case unavailable(String)
     case incompleteResponse
     case invalidTargetLanguage
+    case oversizedTextGroup(Int)
 
     var description: String {
         switch self {
@@ -68,6 +75,8 @@ enum AppleIntelligenceTranslationError: Error, CustomStringConvertible {
             return "Apple Intelligence must return exactly one non-empty translation for every requested text group."
         case .invalidTargetLanguage:
             return "Target language is required."
+        case .oversizedTextGroup(let limit):
+            return "An OCR text group exceeds Apple Intelligence's \(limit)-byte source limit. Select a smaller image region."
         }
     }
 }
@@ -125,14 +134,19 @@ func groupAppleIntelligenceObservations(
     }
 
     var groupedIndexes: [[Int]] = []
+    var currentSourceBytes = 0
     for item in sorted {
+        let lineSourceBytes = item.element.text.utf8.count
         if let currentGroup = groupedIndexes.last,
            currentGroup.count < maximumLinesPerGroup,
+           currentSourceBytes + 1 + lineSourceBytes <= appleIntelligenceMaximumSourceBytes,
            let previousIndex = currentGroup.last,
            shouldJoinAppleIntelligenceLine(observations[previousIndex], item.element) {
             groupedIndexes[groupedIndexes.count - 1].append(item.offset)
+            currentSourceBytes += 1 + lineSourceBytes
         } else {
             groupedIndexes.append([item.offset])
+            currentSourceBytes = lineSourceBytes
         }
     }
 
@@ -266,8 +280,8 @@ func buildAppleIntelligenceTranslationPrompt(
 func makeAppleIntelligenceTranslationBatches(
     _ groups: [AppleIntelligenceTextGroup],
     maxGroupCount: Int = 8,
-    maxSourceBytes: Int = 1_500
-) -> [[AppleIntelligenceTextGroup]] {
+    maxSourceBytes: Int = appleIntelligenceMaximumSourceBytes
+) throws -> [[AppleIntelligenceTextGroup]] {
     // Leave room within the model's 8192-token context for instructions, the
     // constrained response structure, and translated text (which can expand).
     var batches: [[AppleIntelligenceTextGroup]] = []
@@ -276,6 +290,9 @@ func makeAppleIntelligenceTranslationBatches(
 
     for group in groups {
         let groupSourceBytes = group.text.lengthOfBytes(using: .utf8)
+        guard groupSourceBytes <= maxSourceBytes else {
+            throw AppleIntelligenceTranslationError.oversizedTextGroup(maxSourceBytes)
+        }
         let exceedsGroupLimit = currentBatch.count >= maxGroupCount
         let exceedsSourceLimit = currentSourceBytes + groupSourceBytes > maxSourceBytes
 
@@ -388,7 +405,7 @@ private func translateWithAppleIntelligence(
 
     var translations: [AppleIntelligenceGroupTranslation] = []
 
-    for batch in makeAppleIntelligenceTranslationBatches(groups) {
+    for batch in try makeAppleIntelligenceTranslationBatches(groups) {
         let prompt = buildAppleIntelligenceTranslationPrompt(
             groups: batch,
             targetLanguage: targetLanguage

@@ -4,22 +4,27 @@ function cleanString(value, fallback = "") {
   return typeof value === "string" ? value.trim() : fallback;
 }
 
+function rewriteEndpointPath(endpoint, rewrite) {
+  const suffixIndex = endpoint.search(/[?#]/u);
+  const path = suffixIndex === -1 ? endpoint : endpoint.slice(0, suffixIndex);
+  const suffix = suffixIndex === -1 ? "" : endpoint.slice(suffixIndex);
+  return `${rewrite(path)}${suffix}`;
+}
+
 export function normalizeApiEndpoint(value) {
-  const raw = cleanString(value, DEFAULT_SETTINGS.apiEndpoint);
-  if (!raw) {
-    return DEFAULT_SETTINGS.apiEndpoint;
-  }
+  const raw = cleanString(value, DEFAULT_SETTINGS.apiEndpoint) || DEFAULT_SETTINGS.apiEndpoint;
+  return rewriteEndpointPath(raw, (path) => {
+    const withoutTrailingSlash = path.replace(/\/+$/, "");
+    if (withoutTrailingSlash.endsWith("/responses")) {
+      return withoutTrailingSlash.replace(/\/responses$/, "/chat/completions");
+    }
 
-  const withoutTrailingSlash = raw.replace(/\/+$/, "");
-  if (withoutTrailingSlash.endsWith("/responses")) {
-    return withoutTrailingSlash.replace(/\/responses$/, "/chat/completions");
-  }
+    if (withoutTrailingSlash.endsWith("/chat/completions")) {
+      return withoutTrailingSlash;
+    }
 
-  if (withoutTrailingSlash.endsWith("/chat/completions")) {
-    return withoutTrailingSlash;
-  }
-
-  return `${withoutTrailingSlash}/chat/completions`;
+    return `${withoutTrailingSlash}/chat/completions`;
+  });
 }
 
 export function normalizeIosOcrEndpoint(value) {
@@ -28,12 +33,11 @@ export function normalizeIosOcrEndpoint(value) {
     return "";
   }
 
-  const withoutTrailingSlash = raw.replace(/\/+$/, "");
-  if (withoutTrailingSlash.endsWith("/upload")) {
-    return withoutTrailingSlash;
-  }
-
-  return `${withoutTrailingSlash}/upload`;
+  return rewriteEndpointPath(raw, (path) => {
+    const withoutTrailingSlash = path.replace(/\/+$/, "");
+    return withoutTrailingSlash.endsWith("/upload")
+      ? withoutTrailingSlash : `${withoutTrailingSlash}/upload`;
+  });
 }
 
 export function normalizeSettings(rawSettings = {}) {
@@ -66,8 +70,8 @@ export function denormalizeSettings(settings) {
   const iosOcrEndpoint = cleanString(settings.iosOcrEndpoint, DEFAULT_SETTINGS.iosOcrEndpoint);
   return {
     ...settings,
-    apiEndpoint: endpoint.replace(/\/chat\/completions$/, ""),
-    iosOcrEndpoint: iosOcrEndpoint.replace(/\/upload$/, "")
+    apiEndpoint: rewriteEndpointPath(endpoint, (path) => path.replace(/\/chat\/completions$/, "")),
+    iosOcrEndpoint: rewriteEndpointPath(iosOcrEndpoint, (path) => path.replace(/\/upload$/, ""))
   };
 }
 

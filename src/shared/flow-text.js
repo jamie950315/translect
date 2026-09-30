@@ -53,7 +53,9 @@ export function distributeTextAcrossBoxes(text, boxes, options = {}) {
 
     while (tokenIndex < tokens.length) {
       const candidate = appendToken(current, tokens[tokenIndex]);
-      if (measureWidth(candidate, box, boxIndex) <= maxWidth || !current) {
+      // Keep overflow in the final frame for font fitting and clipping. Never
+      // silently discard the tail of a complete provider translation.
+      if (boxIndex === boxes.length - 1 || !current || measureWidth(candidate, box, boxIndex) <= maxWidth) {
         current = candidate;
         tokenIndex += 1;
       } else {

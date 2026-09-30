@@ -22,6 +22,36 @@ describe("settings helpers", () => {
     );
   });
 
+  test("normalizes only the endpoint path and preserves query parameters", () => {
+    expect(normalizeApiEndpoint("https://example.com/v1?api-version=2026-01-01"))
+      .toBe("https://example.com/v1/chat/completions?api-version=2026-01-01");
+    expect(normalizeApiEndpoint("https://example.com/v1/chat/completions?mode=strict"))
+      .toBe("https://example.com/v1/chat/completions?mode=strict");
+    expect(normalizeApiEndpoint("https://example.com/v1/responses?mode=strict#section"))
+      .toBe("https://example.com/v1/chat/completions?mode=strict#section");
+    expect(normalizeIosOcrEndpoint("https://example.com/ocr?mode=strict"))
+      .toBe("https://example.com/ocr/upload?mode=strict");
+    expect(normalizeIosOcrEndpoint("https://example.com/ocr/upload?mode=strict"))
+      .toBe("https://example.com/ocr/upload?mode=strict");
+  });
+
+  test("endpoint form conversion round-trips query parameters", () => {
+    const settings = normalizeSettings({
+      apiEndpoint: "https://example.com/v1?mode=strict",
+      iosOcrEndpoint: "https://example.com/ocr?mode=strict"
+    });
+    expect(denormalizeSettings(settings)).toMatchObject({
+      apiEndpoint: "https://example.com/v1?mode=strict",
+      iosOcrEndpoint: "https://example.com/ocr?mode=strict"
+    });
+    expect(normalizeSettings(denormalizeSettings(settings))).toEqual(settings);
+  });
+
+  test("blank API endpoints still normalize the default chat-completions path", () => {
+    expect(normalizeApiEndpoint("   ")).toBe("https://api.openai.com/v1/chat/completions");
+    expect(normalizeSettings({ apiEndpoint: "   " }).apiEndpoint).toBe("https://api.openai.com/v1/chat/completions");
+  });
+
   test("converts a responses endpoint into chat completions for compatibility", () => {
     expect(normalizeApiEndpoint("https://example.com/v1/responses")).toBe(
       "https://example.com/v1/chat/completions"

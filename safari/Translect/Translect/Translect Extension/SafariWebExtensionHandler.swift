@@ -38,11 +38,11 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 
         do {
             let requestData = try JSONSerialization.data(withJSONObject: message)
-            if isSettingsPersistenceRequest(requestData) {
+            let operation = (message as? [String: Any])?["operation"] as? String
+            if operation == "settings-load" || operation == "settings-save" {
                 return try encodeResponse(handleSettingsPersistenceMessage(requestData))
             }
-            if let request = message as? [String: Any],
-               request["operation"] as? String == "apple-intelligence-translate" {
+            if operation == "apple-intelligence-translate" {
                 logger.info("Routing request to Apple Intelligence translation.")
                 return try encodeResponse(
                     await handleAppleIntelligenceMessage(requestData)

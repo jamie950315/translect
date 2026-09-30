@@ -136,20 +136,6 @@ function colorDistance(firstColor, secondColor) {
   );
 }
 
-function channelDistance(firstColor, secondColor) {
-  const first = parseHexColor(firstColor);
-  const second = parseHexColor(secondColor);
-  if (!first || !second) {
-    return Number.POSITIVE_INFINITY;
-  }
-
-  return (
-    Math.abs(first[0] - second[0]) +
-    Math.abs(first[1] - second[1]) +
-    Math.abs(first[2] - second[2])
-  ) / 3;
-}
-
 function hexLuminance(color) {
   const rgb = parseHexColor(color);
   if (!rgb) {
@@ -206,6 +192,7 @@ export function detectTextInkBoundsFromImageData(imageData, width, height, rect,
   const sampleWidth = Math.max(0, Math.floor(width));
   const sampleHeight = Math.max(0, Math.floor(height));
   const backgroundColor = sampleRectEdgeColorFromImageData(imageData, sampleWidth, sampleHeight, rect);
+  const backgroundRgb = parseHexColor(backgroundColor);
   const backgroundLuminance = hexLuminance(backgroundColor);
   const expectedTextColor = parseHexColor(options.textColor);
   const minX = Math.max(0, Math.floor(rect.x));
@@ -232,10 +219,8 @@ export function detectTextInkBoundsFromImageData(imageData, width, height, rect,
             Math.abs(green - expectedTextColor[1]) +
             Math.abs(blue - expectedTextColor[2])) / 3
         : Number.POSITIVE_INFINITY;
-      const distance = channelDistance(
-        `#${toHexChannel(red)}${toHexChannel(green)}${toHexChannel(blue)}`,
-        backgroundColor
-      );
+      const distance = (Math.abs(red - backgroundRgb[0]) +
+        Math.abs(green - backgroundRgb[1]) + Math.abs(blue - backgroundRgb[2])) / 3;
 
       const matchesExpectedText =
         expectedDistance <= 82 && Math.abs(luminance - backgroundLuminance) >= 0.08;

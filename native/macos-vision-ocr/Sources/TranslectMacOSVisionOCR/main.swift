@@ -8,13 +8,14 @@ do {
     while let messageData = try readNativeMessage(read: {
         try FileHandle.standardInput.read(upToCount: $0) ?? Data()
     }) {
-        if isSettingsPersistenceRequest(messageData) {
+        switch nativeMessageOperation(messageData) {
+        case "settings-load", "settings-save":
             try writeNativeMessage(handleSettingsPersistenceMessage(messageData))
-        } else if isAppleIntelligenceTranslationRequest(messageData) {
+        case "apple-intelligence-translate":
             try await writeNativeMessage(
                 handleAppleIntelligenceMessage(messageData)
             )
-        } else {
+        default:
             try writeNativeMessage(handleVisionOCRMessage(messageData))
         }
     }

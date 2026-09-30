@@ -45,6 +45,8 @@ const settingsStore = createRetainedSettingsStore({
     ? (message) => sendNativeMessageToNativeApp(DEFAULT_SETTINGS.macosVisionHostName, message)
     : null
 });
+let badgeQueue = Promise.resolve();
+let badgeAutoDetect;
 
 async function getStoredSettings() {
   return settingsStore.get();
@@ -57,18 +59,22 @@ async function saveStoredSettings(inputSettings = {}) {
   return nextSettings;
 }
 
-async function syncActionBadge(settings) {
-  if (settings.alwaysAutoDetect) {
-    await chrome.action.setBadgeBackgroundColor({ color: "#a13f2c" });
-    await chrome.action.setBadgeText({ text: "AUTO" });
-    await chrome.action.setTitle({
-      title: "Translect (always auto detect enabled)"
-    });
-    return;
-  }
-
-  await chrome.action.setBadgeText({ text: "" });
-  await chrome.action.setTitle({ title: "Translect" });
+function syncActionBadge(settings) {
+  const autoDetect = settings.alwaysAutoDetect;
+  const result = badgeQueue.then(async () => {
+    if (badgeAutoDetect === autoDetect) return;
+    if (autoDetect) {
+      await chrome.action.setBadgeBackgroundColor({ color: "#a13f2c" });
+      await chrome.action.setBadgeText({ text: "AUTO" });
+      await chrome.action.setTitle({ title: "Translect (always auto detect enabled)" });
+    } else {
+      await chrome.action.setBadgeText({ text: "" });
+      await chrome.action.setTitle({ title: "Translect" });
+    }
+    badgeAutoDetect = autoDetect;
+  });
+  badgeQueue = result.catch(() => {});
+  return result;
 }
 
 async function getActiveTab() {
@@ -376,10 +382,10 @@ async function fetchImageDataUrl(url) {
 }
 
 async function toggleAlwaysAutoDetect() {
-  const current = await getStoredSettings();
-  const updated = await saveStoredSettings({
+  const updated = await settingsStore.update((current) => ({
     alwaysAutoDetect: !current.alwaysAutoDetect
-  });
+  }));
+  await syncActionBadge(updated);
 
   try {
     await dispatchToActiveTab(PAGE_ACTIONS.SETTINGS_UPDATED);
